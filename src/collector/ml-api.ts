@@ -136,12 +136,22 @@ async function openBrowser(): Promise<BrowserContext> {
  */
 async function hasSearchResults(page: Page): Promise<boolean> {
   return page.evaluate(() => {
+    // 1. Verifica se existem links de produtos do ML
+    const hasProductLinks = document.querySelectorAll('a[href*="/p/MLB"], a[href*="produto.mercadolivre.com.br"], a[href*="mercadolivre.com.br/MLB"]').length > 0;
+    if (hasProductLinks) return true;
+
+    // 2. Seletores clássicos e modernos do DOM do ML
     const selectors = [
       '.ui-search-layout__item',
       '.ui-search-result__wrapper',
       '[class*="poly-card"]',
+      '[class*="ui-search"]',
       '.ui-search-results',
       'ol.ui-search-layout',
+      'li.ui-search-layout__item',
+      '.ui-search-item',
+      'section.ui-search-results',
+      'div.ui-search-result',
     ];
     return selectors.some(s => document.querySelectorAll(s).length > 0);
   });
@@ -155,12 +165,18 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
     const results: any[] = [];
 
     // Tenta vários seletores (ML muda frequentemente)
-    let items = document.querySelectorAll('.ui-search-layout__item');
-    if (items.length === 0) items = document.querySelectorAll('[class*="poly-card"]');
-    if (items.length === 0) items = document.querySelectorAll('.ui-search-result__wrapper');
-    if (items.length === 0) items = document.querySelectorAll('li.ui-search-layout__item');
+    let rawItems = Array.from(document.querySelectorAll('.ui-search-layout__item, [class*="poly-card"], .ui-search-result__wrapper, li.ui-search-layout__item, [class*="ui-search-result"], div.ui-search-result__content-wrapper'));
+    
+    // Se não encontrou elementos com classes conhecidas, busca por containers pai de links de produtos
+    if (rawItems.length === 0) {
+      const anchors = document.querySelectorAll('a[href*="mercadolivre.com.br"]');
+      anchors.forEach(a => {
+        const parent = a.closest('li, article, div[class*="search"], div[class*="card"], div[class*="item"]') || a.parentElement;
+        if (parent && !rawItems.includes(parent)) rawItems.push(parent);
+      });
+    }
 
-    items.forEach((item, i) => {
+    rawItems.forEach((item, i) => {
       try {
         // Link limpo
         const link = item.querySelector('a[href*="mercadolivre.com.br"]') as HTMLAnchorElement;
@@ -271,7 +287,7 @@ export async function searchOffers(
   // Detecta se é a primeira execução (sem perfil de browser)
   const hasProfile = existsSync(join(BROWSER_PROFILE_DIR, 'Default'))
     || existsSync(join(BROWSER_PROFILE_DIR, 'Local State'));
-  const isFirstRun = !hasProfile;
+  const isFirstRun = !hasProfile && process.platform === 'win32';
 
   if (isFirstRun) {
     console.log('');
@@ -303,42 +319,47 @@ export async function searchOffers(
 
     // Navega e espera a rede estabilizar (captura redirecionamentos)
     try {
-      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
     } catch {
-      // Timeout de rede é aceitável — a página pode ter carregado parcialmente
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(2000);
     }
 
-    // Espera extra para JS do ML renderizar
-    await page.waitForTimeout(3000);
+    // Espera para JS do ML renderizar os cards
+    await page.waitForTimeout(2500);
 
-    // Verifica se tem resultados (com retry em caso de navegação tardia)
+    // Verifica se tem resultados
     let hasResults = false;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         hasResults = await hasSearchResults(page);
-        break;
+        if (hasResults) break;
+        await page.waitForTimeout(1500);
       } catch {
-        // Contexto destruído por navegação — espera e tenta de novo
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(1500);
       }
     }
 
+    const isCloud = !!process.env.RENDER || process.env.HEADLESS === 'true' || process.platform !== 'win32';
+
     if (!hasResults) {
-      console.log('  🔐 Verificação/login necessário! Complete no browser aberto...');
-      try {
-        // Monitora navegação de volta para a página de resultados
-        await page.waitForURL('**/lista.mercadolivre.com.br/**', { timeout: 180000 })
-          .catch(() => {});
-        // Espera os resultados carregarem
-        await page.waitForSelector(
-          '.ui-search-layout__item, [class*="poly-card"], .ui-search-results, ol.ui-search-layout',
-          { timeout: 30000 }
-        );
-        hasResults = true;
-        console.log('  ✅ Resultados carregados!');
-      } catch {
-        console.log('  ⏰ Tempo esgotado. Tente novamente.');
+      if (isCloud) {
+        // Em Cloud (Render Linux headless), não travamos em waitForURL de 3 min!
+        console.log('  ℹ️ Tentando extração direta de ofertas estáticas...');
+        const directOffers = await extractOffers(page);
+        if (directOffers.length > 0) {
+          hasResults = true;
+        }
+      } else {
+        console.log('  🔐 Verificação/login necessário! Complete no browser aberto...');
+        try {
+          await page.waitForSelector(
+            '.ui-search-layout__item, [class*="poly-card"], .ui-search-results, ol.ui-search-layout',
+            { timeout: 10000 }
+          );
+          hasResults = true;
+        } catch {
+          console.log('  ⏰ Tempo esgotado para esta busca.');
+        }
       }
     }
 
