@@ -17,9 +17,9 @@ let sock: WASocket | null = null;
 let isConnected = false;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_DELAY_MS = 10000;
+const RECONNECT_DELAY_MS = 15000;
 
-// Pairing code atual - exposto para o endpoint GET /api/pairing-code do servidor HTTP
+// Exposto para o endpoint GET /api/pairing-code
 export let currentPairingCode: string | null = null;
 export let pairingCodeRequestedAt: Date | null = null;
 
@@ -65,6 +65,20 @@ async function saveWaAuthToDb() {
   }
 }
 
+function printPairingCode(code: string) {
+  console.log('\n╔══════════════════════════════════════════╗');
+  console.log('║   VINCULAR WHATSAPP — PAIRING CODE       ║');
+  console.log('╠══════════════════════════════════════════╣');
+  console.log(`║  Codigo: ${code.padEnd(32)}║`);
+  console.log('╠══════════════════════════════════════════╣');
+  console.log('║  No WhatsApp:                            ║');
+  console.log('║  ⚙ Configuracoes → Dispositivos           ║');
+  console.log('║  vinculados → Vincular com numero        ║');
+  console.log('║  de telefone → Digite o codigo acima     ║');
+  console.log('╚══════════════════════════════════════════╝');
+  console.log('[WA] Codigo tambem disponivel em: GET /api/pairing-code\n');
+}
+
 // ── Cliente WhatsApp ───────────────────────────────────────────────────────
 
 export async function initWhatsAppClient(): Promise<WASocket> {
@@ -77,73 +91,56 @@ export async function initWhatsAppClient(): Promise<WASocket> {
   }
 
   if (!existsSync(AUTH_DIR)) mkdirSync(AUTH_DIR, { recursive: true });
-
-  // Restaura sessão salva no Neon antes de iniciar
   await restoreWaAuthFromDb();
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
-  // Número de telefone para Pairing Code (definir WHATSAPP_PHONE no Render)
-  // Formato: somente dígitos com DDI, ex: 5547999887766
+  // Número de telefone para Pairing Code (apenas dígitos, com DDI)
   const phoneNumber = (process.env.WHATSAPP_PHONE || '').replace(/\D/g, '');
   const usePairingCode = phoneNumber.length >= 10;
-
-  if (usePairingCode) {
-    console.log(`[WA] Modo Pairing Code ativado para o numero: +${phoneNumber}`);
-  } else {
-    console.log('[WA] WHATSAPP_PHONE nao configurado. Defina no painel do Render como variavel de ambiente.');
-  }
 
   return new Promise((resolve, reject) => {
     sock = makeWASocket({
       version,
       auth: state,
-      printQRInTerminal: false, // QR ASCII desativado - usamos Pairing Code
+      printQRInTerminal: false,
       logger: pino({ level: 'silent' }),
       browser: ['ML Ofertas Bot', 'Chrome', '1.0.0'],
       connectTimeoutMs: 60000,
       keepAliveIntervalMs: 30000,
     });
 
-    // Persiste credenciais sempre que atualizarem
+    // ── CRÍTICO: Solicita Pairing Code IMEDIATAMENTE após criar o socket,
+    //            ANTES do evento QR ser emitido. Isso é obrigatório pelo Baileys.
+    if (usePairingCode && !state.creds.registered) {
+      console.log(`[WA] Solicitando Pairing Code para +${phoneNumber}...`);
+      // Pequeno delay para o socket inicializar a conexão com os servidores WA
+      setTimeout(async () => {
+        if (!sock) return;
+        try {
+          const code = await sock.requestPairingCode(phoneNumber);
+          currentPairingCode = code;
+          pairingCodeRequestedAt = new Date();
+          printPairingCode(code);
+        } catch (err) {
+          console.error('[WA] Erro ao solicitar Pairing Code:', err);
+          console.log('[WA] Verifique se WHATSAPP_PHONE esta correto e tente novamente.');
+        }
+      }, 3000);
+    } else if (!usePairingCode) {
+      console.log('[WA] ATENCAO: Configure WHATSAPP_PHONE=5547XXXXXXXXX no Render!');
+    } else {
+      console.log('[WA] Credenciais existentes encontradas — reconectando sem Pairing Code...');
+    }
+
     sock.ev.on('creds.update', async () => {
       await saveCreds();
       await saveWaAuthToDb();
     });
 
-    sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update;
-
-      // Quando o Baileys gera um QR interno, interceptamos e pedimos Pairing Code
-      if (qr) {
-        reconnectAttempts++;
-
-        if (usePairingCode && sock && !sock.authState.creds.registered) {
-          try {
-            const code = await sock.requestPairingCode(phoneNumber);
-            currentPairingCode = code;
-            pairingCodeRequestedAt = new Date();
-
-            console.log('\n╔══════════════════════════════════════════╗');
-            console.log('║   VINCULAR WHATSAPP — PAIRING CODE       ║');
-            console.log('╠══════════════════════════════════════════╣');
-            console.log(`║  Codigo: ${code.padEnd(30)}  ║`);
-            console.log('╠══════════════════════════════════════════╣');
-            console.log('║  No WhatsApp:                            ║');
-            console.log('║  ⚙ Configuracoes                         ║');
-            console.log('║  → Dispositivos vinculados               ║');
-            console.log('║  → Vincular com numero de telefone       ║');
-            console.log('║  → Digite o codigo acima                 ║');
-            console.log('╚══════════════════════════════════════════╝\n');
-            console.log('[WA] Codigo tambem disponivel em: GET /api/pairing-code\n');
-          } catch (err) {
-            console.error('[WA] Erro ao solicitar Pairing Code:', err);
-          }
-        } else if (!usePairingCode) {
-          console.log('[WA] ATENCAO: Configure WHATSAPP_PHONE no Render para usar Pairing Code!');
-        }
-      }
+    sock.ev.on('connection.update', (update) => {
+      const { connection, lastDisconnect } = update;
 
       if (connection === 'open') {
         console.log('[WA] ✅ WhatsApp conectado com sucesso!');
@@ -161,11 +158,17 @@ export async function initWhatsAppClient(): Promise<WASocket> {
         console.log(`[WA] Conexao fechada. Codigo: ${statusCode}. Reconectando: ${shouldReconnect}`);
 
         if (shouldReconnect) {
+          reconnectAttempts++;
+          console.log(`[WA] Aguardando ${RECONNECT_DELAY_MS / 1000}s antes de reconectar (tentativa ${reconnectAttempts})...`);
           setTimeout(() => {
             initWhatsAppClient().then(resolve).catch(reject);
           }, RECONNECT_DELAY_MS);
         } else {
-          reject(new Error('Sessao encerrada (logged out). Reconecte pelo pairing code.'));
+          console.error('[WA] Sessao encerrada (logged out). Reconecte pelo pairing code.');
+          // Limpa sessão local e tenta nova autenticação
+          sock = null;
+          isConnected = false;
+          reject(new Error('Sessao encerrada. Reconecte via /api/pairing-code'));
         }
       }
     });
