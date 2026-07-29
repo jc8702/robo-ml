@@ -6,7 +6,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import { join } from 'node:path';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import type { AffiliateOffer } from '../affiliate/link-converter.js';
 import { formatIndividualOffer } from '../formatter/whatsapp.js';
 import { getDbPool } from '../db/index.js';
@@ -19,11 +19,10 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY_MS = 15000;
 
-// Exposto para o endpoint GET /api/pairing-code
 export let currentPairingCode: string | null = null;
 export let pairingCodeRequestedAt: Date | null = null;
 
-// ── Persistência de sessão no Neon ─────────────────────────────────────────
+// --- Persistencia de sessao no Neon ---
 
 async function restoreWaAuthFromDb() {
   const db = getDbPool();
@@ -38,6 +37,8 @@ async function restoreWaAuthFromDb() {
         writeFileSync(filePath, row.value, 'utf-8');
       }
       console.log(`[DB] Sessao WhatsApp restaurada do Neon (${res.rows.length} arquivo(s)).`);
+    } else {
+      console.log('[DB] Nenhuma sessao salva no Neon. Inicializacao limpa.');
     }
   } catch (err) {
     console.error('[DB] Falha ao restaurar sessao do Neon:', err);
@@ -51,7 +52,6 @@ async function saveWaAuthToDb() {
     const files = readdirSync(AUTH_DIR);
     if (files.length === 0) return;
 
-    // Remove registros antigos antes de inserir os atuais (evita acumulo)
     await db.query("DELETE FROM app_settings WHERE key LIKE 'WA_AUTH_%'");
 
     for (const file of files) {
@@ -70,28 +70,50 @@ async function saveWaAuthToDb() {
   }
 }
 
-
-function printPairingCode(code: string) {
-  console.log('\n╔══════════════════════════════════════════╗');
-  console.log('║   VINCULAR WHATSAPP — PAIRING CODE       ║');
-  console.log('╠══════════════════════════════════════════╣');
-  console.log(`║  Codigo: ${code.padEnd(32)}║`);
-  console.log('╠══════════════════════════════════════════╣');
-  console.log('║  No WhatsApp:                            ║');
-  console.log('║  ⚙ Configuracoes → Dispositivos           ║');
-  console.log('║  vinculados → Vincular com numero        ║');
-  console.log('║  de telefone → Digite o codigo acima     ║');
-  console.log('╚══════════════════════════════════════════╝');
-  console.log('[WA] Codigo tambem disponivel em: GET /api/pairing-code\n');
+async function clearWaAuthFromDb() {
+  const db = getDbPool();
+  if (!db) return;
+  try {
+    await db.query("DELETE FROM app_settings WHERE key LIKE 'WA_AUTH_%'");
+    console.log('[DB] Sessao WhatsApp invalida/antiga removida do Neon PostgreSQL com sucesso.');
+  } catch (err) {
+    console.error('[DB] Falha ao limpar sessao do Neon:', err);
+  }
 }
 
-// ── Cliente WhatsApp ───────────────────────────────────────────────────────
+function clearLocalAuth() {
+  if (existsSync(AUTH_DIR)) {
+    try {
+      rmSync(AUTH_DIR, { recursive: true, force: true });
+      mkdirSync(AUTH_DIR, { recursive: true });
+      console.log('[WA] Sessao local limpa.');
+    } catch (err) {
+      console.error('[WA] Falha ao limpar sessao local:', err);
+    }
+  }
+}
+
+function printPairingCode(code: string) {
+  console.log('\n========================================');
+  console.log('  VINCULAR WHATSAPP - PAIRING CODE');
+  console.log('========================================');
+  console.log(`  Codigo: ${code}`);
+  console.log('----------------------------------------');
+  console.log('  No WhatsApp:');
+  console.log('  Configuracoes -> Dispositivos vinculados');
+  console.log('  -> Vincular com numero de telefone');
+  console.log('  -> Digite o codigo acima');
+  console.log('========================================');
+  console.log('[WA] Codigo tambem em: GET /api/pairing-code\n');
+}
+
+// --- Cliente WhatsApp ---
 
 export async function initWhatsAppClient(): Promise<WASocket> {
   if (sock && isConnected) return sock;
 
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    console.error(`[WA] Maximo de tentativas atingido. Aguardando 60s...`);
+    console.error('[WA] Maximo de tentativas atingido. Aguardando 60s...');
     await new Promise((r) => setTimeout(r, 60000));
     reconnectAttempts = 0;
   }
@@ -102,7 +124,7 @@ export async function initWhatsAppClient(): Promise<WASocket> {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
-  // Número de telefone para Pairing Code (apenas dígitos, com DDI)
+  // Se WHATSAPP_PHONE tiver pelo menos 10 dígitos (com DDI), usamos Pairing Code
   const phoneNumber = (process.env.WHATSAPP_PHONE || '').replace(/\D/g, '');
   const usePairingCode = phoneNumber.length >= 10;
 
@@ -117,11 +139,9 @@ export async function initWhatsAppClient(): Promise<WASocket> {
       keepAliveIntervalMs: 30000,
     });
 
-    // ── CRÍTICO: Solicita Pairing Code IMEDIATAMENTE após criar o socket,
-    //            ANTES do evento QR ser emitido. Isso é obrigatório pelo Baileys.
+    // Se nao estiver registrado e tiver telefone configurado, pede o Pairing Code
     if (usePairingCode && !state.creds.registered) {
       console.log(`[WA] Solicitando Pairing Code para +${phoneNumber}...`);
-      // Pequeno delay para o socket inicializar a conexão com os servidores WA
       setTimeout(async () => {
         if (!sock) return;
         try {
@@ -134,10 +154,8 @@ export async function initWhatsAppClient(): Promise<WASocket> {
           console.log('[WA] Verifique se WHATSAPP_PHONE esta correto e tente novamente.');
         }
       }, 3000);
-    } else if (!usePairingCode) {
-      console.log('[WA] ATENCAO: Configure WHATSAPP_PHONE=5547XXXXXXXXX no Render!');
-    } else {
-      console.log('[WA] Credenciais existentes encontradas — reconectando sem Pairing Code...');
+    } else if (!usePairingCode && !state.creds.registered) {
+      console.log('[WA] ATENCAO: Configure WHATSAPP_PHONE no painel do Render!');
     }
 
     sock.ev.on('creds.update', async () => {
@@ -170,18 +188,23 @@ export async function initWhatsAppClient(): Promise<WASocket> {
             initWhatsAppClient().then(resolve).catch(reject);
           }, RECONNECT_DELAY_MS);
         } else {
-          console.error('[WA] Sessao encerrada (logged out). Reconecte pelo pairing code.');
-          // Limpa sessão local e tenta nova autenticação
+          // 401 = logged out (sessao invalida ou encerrada)
+          console.error('[WA] Sessao encerrada (logged out). Limpando credenciais invalidas...');
           sock = null;
           isConnected = false;
-          reject(new Error('Sessao encerrada. Reconecte via /api/pairing-code'));
+          clearLocalAuth();
+          clearWaAuthFromDb().then(() => {
+            console.log('[WA] Sessao limpa. Reiniciando para gerar novo Pairing Code...');
+            reconnectAttempts = 0;
+            initWhatsAppClient().then(resolve).catch(reject);
+          });
         }
       }
     });
   });
 }
 
-// ── Envio de Ofertas ───────────────────────────────────────────────────────
+// --- Envio de Ofertas ---
 
 export async function sendOfferWithPhoto(
   offer: AffiliateOffer,
