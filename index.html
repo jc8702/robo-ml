@@ -169,6 +169,7 @@
       color: #ffffff;
     }
 
+    /* TREE CASCADE STYLES */
     .search-filter-box {
       margin-bottom: 1.25rem;
     }
@@ -199,6 +200,7 @@
       padding-right: 0.5rem;
     }
 
+    /* Scrollbar estilizada */
     .cascade-tree::-webkit-scrollbar {
       width: 8px;
     }
@@ -212,7 +214,7 @@
     }
 
     .parent-node {
-      flex-shrink: 0;
+      flex-shrink: 0; /* IMPEDE A COMPRESSÃO VERTICAL DOS CARDS DA ÁRVORE */
       background: rgba(15, 23, 42, 0.75);
       border: 1px solid var(--border-card);
       border-radius: 12px;
@@ -308,6 +310,7 @@
       cursor: pointer;
     }
 
+    /* Active Selection Summary Bar */
     .selection-summary-bar {
       display: flex;
       flex-wrap: wrap;
@@ -344,6 +347,7 @@
       color: var(--danger);
     }
 
+    /* Form Fields */
     .form-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -378,6 +382,7 @@
       box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
     }
 
+    /* Offers Gallery */
     .offers-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -480,6 +485,7 @@
       font-weight: 600;
     }
 
+    /* Console Activity Log */
     .console-box {
       background: #020617;
       border: 1px solid var(--border-card);
@@ -502,6 +508,7 @@
 
   <div class="container">
     
+    <!-- HEADER -->
     <header>
       <div class="brand">
         <div class="brand-icon">🛒</div>
@@ -522,6 +529,7 @@
       </div>
     </header>
 
+    <!-- CARD 1: SELETOR EM CASCATA COMPLETO -->
     <div class="card">
       <div class="card-title">
         <span>🌳 Árvore Completa de Categorias & Subcategorias</span>
@@ -531,19 +539,25 @@
         </div>
       </div>
 
+      <!-- Filtro Rápido por Texto na Árvore -->
       <div class="search-filter-box">
         <input type="text" id="inputTreeSearch" placeholder="🔍 Filtrar subcategorias na tela (ex: iphone, whey, tv, notebook gamer...)...">
       </div>
 
+      <!-- Resumo das Subcategorias Selecionadas -->
       <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.35rem; font-weight: 500;">
         Filtros Ativos para a Próxima Varredura:
       </div>
       <div class="selection-summary-bar" id="selectionSummary">
+        <!-- Chips ativos serão renderizados aqui -->
       </div>
 
+      <!-- ÁRVORE EM CASCATA DE CATEGORIAS E SUBCATEGORIAS COMPLETA -->
       <div class="cascade-tree" id="cascadeTree">
+        <!-- Inserido dinamicamente via JS -->
       </div>
 
+      <!-- INCLUIR TERMO DE NICHO CUSTOMIZADO -->
       <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-card); display: flex; gap: 0.75rem; align-items: center;">
         <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500; min-width: 140px;">➕ Adicionar Subnicho:</span>
         <input type="text" id="inputCustomCategory" placeholder="Ex: iphone 16 pro max, placa rtx 4060, tênis olympikus..." style="flex: 1;">
@@ -551,6 +565,7 @@
       </div>
     </div>
 
+    <!-- CARD 2: FILTROS E CONFIGURAÇÃO -->
     <div class="card">
       <div class="card-title">
         <span>⚙️ Filtros de Oferta & Agendamento</span>
@@ -591,6 +606,7 @@
       </div>
     </div>
 
+    <!-- CARD 3: GALERIA DE OFERTAS ENVIADAS -->
     <div class="card">
       <div class="card-title">
         <span>📸 Histórico Recente de Ofertas Enviadas</span>
@@ -598,9 +614,11 @@
       </div>
 
       <div class="offers-grid" id="offersGrid">
+        <!-- Cards de ofertas inseridos via JS -->
       </div>
     </div>
 
+    <!-- CARD 4: CONSOLE DE ATIVIDADE -->
     <div class="card">
       <div class="card-title">
         📟 Console de Status
@@ -613,6 +631,7 @@
   </div>
 
   <script>
+    // CATÁLOGO COMPLETO DAS CATEGORIAS & SUBCATEGORIAS/MARCAS MERCADO LIVRE
     const CASCADE_DATA = [
       {
         id: 'celulares',
@@ -779,17 +798,17 @@
           { id: 'pneu aro', name: 'Pneus (Michelin, Pirelli, Goodyear)' },
           { id: 'multimidia android', name: 'Central Multimídia & Som Automotivo' },
           { id: 'oleo motor 5w30', name: 'Óleos de Motor & Fluidos' },
-          { id: 'estetica automotiva', name: 'Ceras, Cermet & Estética Automotiva' },
+          { id: 'estetica automotiva', name: 'Ceras & Estética Automotiva' },
         ]
       },
       {
-        id: 'animais',
-        name: 'Pet Shop & Cuidados com Animais',
-        icon: '🐾',
+        id: 'petshop',
+        name: 'Pet Shop & Animais',
+        icon: '🐶',
         subs: [
-          { id: 'racao caes', name: 'Rações Super Premium Cães & Gatos' },
-          { id: 'racao gatos', name: 'Petiscos, Sachês & Acessórios' },
-          { id: 'caminha pet', name: 'Caminhas, Arranhadores & Brinquedos' },
+          { id: 'racao caes', name: 'Rações para Cães (Royal Canin, Premier, Golden)' },
+          { id: 'racao gatos', name: 'Rações & Areia para Gatos' },
+          { id: 'caminha pet', name: 'Camas, Arranhadores & Acessórios Pet' },
         ]
       }
     ];
@@ -797,130 +816,122 @@
     let selectedCategories = [];
     let isRunning = false;
 
-    const cascadeTree = document.getElementById('cascadeTree');
-    const selectionSummary = document.getElementById('selectionSummary');
-    const inputTreeSearch = document.getElementById('inputTreeSearch');
-    const inputCustomCategory = document.getElementById('inputCustomCategory');
-    const btnAddCustom = document.getElementById('btnAddCustom');
-    const btnExpandAll = document.getElementById('btnExpandAll');
-    const btnUnselectAll = document.getElementById('btnUnselectAll');
-    const consoleBox = document.getElementById('consoleBox');
+    // DOM
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
     const btnToggleBot = document.getElementById('btnToggleBot');
     const btnRunNow = document.getElementById('btnRunNow');
+    const cascadeTree = document.getElementById('cascadeTree');
+    const selectionSummary = document.getElementById('selectionSummary');
+    const inputTreeSearch = document.getElementById('inputTreeSearch');
+    const btnExpandAll = document.getElementById('btnExpandAll');
+    const btnUnselectAll = document.getElementById('btnUnselectAll');
+    const inputCustomCategory = document.getElementById('inputCustomCategory');
+    const btnAddCustom = document.getElementById('btnAddCustom');
     const btnSaveConfig = document.getElementById('btnSaveConfig');
     const btnRefreshHistory = document.getElementById('btnRefreshHistory');
     const offersGrid = document.getElementById('offersGrid');
+    const consoleBox = document.getElementById('consoleBox');
 
     function log(msg) {
-      const line = document.createElement('div');
-      line.className = 'log-line';
       const time = new Date().toLocaleTimeString('pt-BR');
-      line.textContent = `[${time}] ${msg}`;
-      consoleBox.appendChild(line);
+      const div = document.createElement('div');
+      div.className = 'log-line';
+      div.textContent = `[${time}] ${msg}`;
+      consoleBox.appendChild(div);
       consoleBox.scrollTop = consoleBox.scrollHeight;
     }
 
+    // Renderiza a Árvore Completa
     function renderCascadeTree(filterText = '') {
       cascadeTree.innerHTML = '';
-      const filter = filterText.toLowerCase().trim();
+      const filterLower = filterText.toLowerCase().trim();
 
       CASCADE_DATA.forEach(cat => {
-        const matchingSubs = cat.subs.filter(sub => 
-          sub.name.toLowerCase().includes(filter) || 
-          sub.id.toLowerCase().includes(filter) ||
-          cat.name.toLowerCase().includes(filter)
+        const matchingSubs = cat.subs.filter(s => 
+          !filterLower || 
+          cat.name.toLowerCase().includes(filterLower) || 
+          s.name.toLowerCase().includes(filterLower) || 
+          s.id.toLowerCase().includes(filterLower)
         );
 
-        if (filter && matchingSubs.length === 0) return;
+        if (filterLower && matchingSubs.length === 0) return;
 
-        const subsToRender = filter ? matchingSubs : cat.subs;
+        const subIds = cat.subs.map(s => s.id);
+        const selectedSubCount = subIds.filter(id => selectedCategories.includes(id)).length;
+        const isParentSelected = selectedSubCount > 0 && selectedSubCount === subIds.length;
 
         const parentDiv = document.createElement('div');
-        parentDiv.className = `parent-node ${filter ? 'open' : ''}`;
+        parentDiv.className = `parent-node ${filterLower ? 'open' : ''}`;
 
-        const allSubIds = subsToRender.map(s => s.id);
-        const selectedCountInParent = allSubIds.filter(id => selectedCategories.includes(id)).length;
-        const isAllSelected = allSubIds.length > 0 && selectedCountInParent === allSubIds.length;
-        const isSomeSelected = selectedCountInParent > 0 && !isAllSelected;
-
-        const headerDiv = document.createElement('div');
-        headerDiv.className = 'parent-header';
-
-        headerDiv.innerHTML = `
+        // Header
+        const header = document.createElement('div');
+        header.className = 'parent-header';
+        header.innerHTML = `
           <div class="parent-left">
             <span class="parent-toggle-icon">▶</span>
-            <input type="checkbox" ${isAllSelected ? 'checked' : ''} id="chk-parent-${cat.id}">
+            <input type="checkbox" ${isParentSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleParentGroup('${cat.id}', this.checked)">
             <span>${cat.icon} ${cat.name}</span>
           </div>
-          <span class="badge-count">${selectedCountInParent} / ${cat.subs.length} ativas</span>
+          <span class="badge-count">${selectedSubCount}/${cat.subs.length} selecionadas</span>
         `;
 
-        const chkParent = headerDiv.querySelector(`#chk-parent-${cat.id}`);
-        chkParent.indeterminate = isSomeSelected;
-
-        chkParent.addEventListener('click', (e) => {
-          e.stopPropagation();
-          toggleParentGroup(allSubIds, e.target.checked);
-        });
-
-        headerDiv.addEventListener('click', () => {
+        header.addEventListener('click', () => {
           parentDiv.classList.toggle('open');
         });
 
-        const listDiv = document.createElement('div');
-        listDiv.className = 'subcategories-list';
+        // Sublist
+        const subList = document.createElement('div');
+        subList.className = 'subcategories-list';
 
-        subsToRender.forEach(sub => {
-          const isSubSelected = selectedCategories.includes(sub.id);
-          const itemDiv = document.createElement('label');
-          itemDiv.className = 'sub-item';
-          itemDiv.innerHTML = `
-            <input type="checkbox" value="${sub.id}" ${isSubSelected ? 'checked' : ''}>
+        matchingSubs.forEach(sub => {
+          const isSubChecked = selectedCategories.includes(sub.id);
+          const subLabel = document.createElement('label');
+          subLabel.className = 'sub-item';
+          subLabel.innerHTML = `
+            <input type="checkbox" value="${sub.id}" ${isSubChecked ? 'checked' : ''} onchange="toggleSingleCategory('${sub.id}', this.checked)">
             <span>${sub.name}</span>
           `;
-
-          const chkSub = itemDiv.querySelector('input');
-          chkSub.addEventListener('change', (e) => {
-            toggleSingleCategory(sub.id, e.target.checked);
-          });
-
-          listDiv.appendChild(itemDiv);
+          subList.appendChild(subLabel);
         });
 
-        parentDiv.appendChild(headerDiv);
-        parentDiv.appendChild(listDiv);
+        parentDiv.appendChild(header);
+        parentDiv.appendChild(subList);
         cascadeTree.appendChild(parentDiv);
       });
 
-      renderSelectionSummary();
+      renderSummaryChips();
     }
 
-    function renderSelectionSummary() {
+    function renderSummaryChips() {
       selectionSummary.innerHTML = '';
+
       if (selectedCategories.length === 0) {
-        selectionSummary.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">Nenhum filtro selecionado. O robô usará o catálogo global.</span>';
+        selectionSummary.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">Nenhuma subcategoria selecionada. (Selecione acima para filtrar com precisão)</span>';
         return;
       }
 
       selectedCategories.forEach(catId => {
-        const chip = document.createElement('div');
-        chip.className = 'active-chip';
-        chip.innerHTML = `
-          <span>${catId}</span>
-          <span class="active-chip-remove" data-id="${catId}">&times;</span>
-        `;
-
-        chip.querySelector('.active-chip-remove').addEventListener('click', () => {
-          removeSingleCategory(catId);
+        let displayName = catId;
+        CASCADE_DATA.forEach(parent => {
+          if (parent.id === catId) displayName = `${parent.icon} ${parent.name}`;
+          parent.subs.forEach(s => {
+            if (s.id === catId) displayName = `${parent.icon} ${s.name}`;
+          });
         });
 
+        const chip = document.createElement('div');
+        chip.className = 'active-chip';
+        chip.innerHTML = `${displayName} <span class="active-chip-remove" onclick="removeSingleCategory('${catId}')">&times;</span>`;
         selectionSummary.appendChild(chip);
       });
     }
 
-    function toggleParentGroup(subIds, isChecked) {
+    function toggleParentGroup(parentId, isChecked) {
+      const parent = CASCADE_DATA.find(p => p.id === parentId);
+      if (!parent) return;
+
+      const subIds = parent.subs.map(s => s.id);
       if (isChecked) {
         subIds.forEach(id => {
           if (!selectedCategories.includes(id)) selectedCategories.push(id);
@@ -984,6 +995,7 @@
       return ids;
     }
 
+    // API Config
     async function loadConfig() {
       try {
         const res = await fetch('/api/config');
@@ -1057,17 +1069,18 @@
       }
     }
 
+    // Histórico de Ofertas
     async function loadHistory() {
       try {
         const res = await fetch('/api/history');
         const items = await res.json();
 
-        if (!Array.isArray(items) || items.length === 0) {
-          offersGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem;">Nenhuma oferta enviada recentemente.</div>';
+        offersGrid.innerHTML = '';
+        if (!items || items.length === 0) {
+          offersGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; grid-column: 1/-1;">Nenhuma oferta enviada ainda. As ofertas enviadas no WhatsApp aparecerão aqui!</div>';
           return;
         }
 
-        offersGrid.innerHTML = '';
         items.slice(0, 12).forEach(item => {
           const card = document.createElement('div');
           card.className = 'offer-card';
@@ -1096,6 +1109,7 @@
       }
     }
 
+    // Listeners
     btnSaveConfig.addEventListener('click', saveConfigToServer);
     btnRefreshHistory.addEventListener('click', loadHistory);
 
@@ -1130,16 +1144,7 @@
     });
 
     // Init - Renderização Instantânea
-    try {
-      const saved = localStorage.getItem('ml_categories');
-      if (saved) {
-        selectedCategories = JSON.parse(saved);
-      } else {
-        selectedCategories = getAllSubCategoryIds();
-      }
-    } catch {
-      selectedCategories = getAllSubCategoryIds();
-    }
+    selectedCategories = getAllSubCategoryIds();
     renderCascadeTree();
     loadConfig();
     loadHistory();

@@ -1,17 +1,15 @@
 {
   "version": 2,
-  "rewrites": [
+  "builds": [
     {
-      "source": "/api/config",
-      "destination": "/api/config.ts"
-    },
+      "src": "public/index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
     {
-      "source": "/api/history",
-      "destination": "/api/history.ts"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/(.*)",
+      "dest": "/public/index.html"
     }
   ]
 }
