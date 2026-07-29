@@ -7,14 +7,53 @@ import makeWASocket, {
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import { join } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { AffiliateOffer } from '../affiliate/link-converter.js';
 import { formatIndividualOffer } from '../formatter/whatsapp.js';
+import { getDbPool } from '../db/index.js';
 
 const AUTH_DIR = join(process.cwd(), '.wa-auth');
 
 let sock: WASocket | null = null;
 let isConnected = false;
+
+async function restoreWaAuthFromDb() {
+  const db = getDbPool();
+  if (!db) return;
+  try {
+    const res = await db.query("SELECT key, value FROM app_settings WHERE key LIKE 'WA_AUTH_%'");
+    if (res.rows.length > 0) {
+      if (!existsSync(AUTH_DIR)) mkdirSync(AUTH_DIR, { recursive: true });
+      for (const row of res.rows) {
+        const fileName = row.key.replace('WA_AUTH_', '');
+        const filePath = join(AUTH_DIR, fileName);
+        writeFileSync(filePath, row.value, 'utf-8');
+      }
+      console.log(`📦 Sessão do WhatsApp restaurada do Neon PostgreSQL (${res.rows.length} arquivo(s)).`);
+    }
+  } catch (err) {
+    console.error('⚠️ Não foi possível restaurar sessão do WhatsApp do Neon:', err);
+  }
+}
+
+async function saveWaAuthToDb() {
+  const db = getDbPool();
+  if (!db || !existsSync(AUTH_DIR)) return;
+  try {
+    const files = readdirSync(AUTH_DIR);
+    for (const file of files) {
+      const filePath = join(AUTH_DIR, file);
+      const content = readFileSync(filePath, 'utf-8');
+      const key = `WA_AUTH_${file}`;
+      await db.query(
+        `INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [key, content]
+      );
+    }
+  } catch (err) {
+    console.error('⚠️ Erro ao persistir sessão do WhatsApp no Neon:', err);
+  }
+}
 
 /**
  * Inicializa a conexão com o WhatsApp via Baileys.
@@ -26,6 +65,8 @@ export async function initWhatsAppClient(): Promise<WASocket> {
   if (!existsSync(AUTH_DIR)) {
     mkdirSync(AUTH_DIR, { recursive: true });
   }
+
+  await restoreWaAuthFromDb();
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
@@ -39,7 +80,10 @@ export async function initWhatsAppClient(): Promise<WASocket> {
       browser: ['ML Ofertas Bot', 'Chrome', '1.0.0'],
     });
 
-    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', async () => {
+      await saveCreds();
+      await saveWaAuthToDb();
+    });
 
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr } = update;

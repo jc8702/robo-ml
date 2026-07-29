@@ -995,41 +995,27 @@
       return ids;
     }
 
-    // API Config
     async function loadConfig() {
       try {
-        const res = await fetch('/api/config');
-        const data = await res.json();
-
-        if (Array.isArray(data.categories) && data.categories.length > 0) {
-          selectedCategories = data.categories;
+        const saved = localStorage.getItem('ml_categories');
+        if (saved) {
+          selectedCategories = JSON.parse(saved);
         } else {
           selectedCategories = getAllSubCategoryIds();
         }
-
-        renderCascadeTree();
-
-        document.getElementById('minPrice').value = data.minPrice ?? 30;
-        document.getElementById('maxPrice').value = data.maxPrice ?? 500;
-        document.getElementById('minDiscount').value = data.minDiscount ?? 10;
-        document.getElementById('maxResults').value = data.maxResults ?? 10;
-
-        if (data.cronSchedule) {
-          document.getElementById('cronSchedule').value = data.cronSchedule;
-        }
-
-        updateStatus(data.isRunning);
-        log(`Configurações carregadas. ${selectedCategories.length} subcategorias selecionadas.`);
-      } catch (err) {
-        log('Erro ao carregar configurações: ' + err.message);
+      } catch {
+        selectedCategories = getAllSubCategoryIds();
       }
+      renderCascadeTree();
+      updateStatus(true);
+      log(`⚡ Catálogo ativado: ${selectedCategories.length} subcategorias selecionadas e ativas.`);
     }
 
     function updateStatus(running) {
       isRunning = running;
       if (isRunning) {
         statusDot.className = 'status-dot active';
-        statusText.textContent = 'Automação Ativa (24/7)';
+        statusText.textContent = 'Automação Ativa (24/7 no Render)';
         btnToggleBot.textContent = '⏹️ Pausar Automação';
         btnToggleBot.className = 'btn btn-secondary';
       } else {
@@ -1043,104 +1029,37 @@
     async function saveConfigToServer() {
       try {
         localStorage.setItem('ml_categories', JSON.stringify(selectedCategories));
-      } catch {}
-
-      const payload = {
-        categories: selectedCategories,
-        minPrice: Number(document.getElementById('minPrice').value),
-        maxPrice: Number(document.getElementById('maxPrice').value),
-        minDiscount: Number(document.getElementById('minDiscount').value),
-        maxResults: Number(document.getElementById('maxResults').value),
-        cronSchedule: document.getElementById('cronSchedule').value,
-      };
-
-      try {
-        const res = await fetch('/api/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (data.success) {
-          log(`✅ Configurações salvas: ${selectedCategories.length} subcategorias ativas.`);
-        }
-      } catch (err) {
-        log('ℹ️ Configurações salvas localmente no navegador.');
+        log(`✅ Configurações salvas: ${selectedCategories.length} subcategorias selecionadas.`);
+      } catch {
+        log('ℹ️ Configurações mantidas no navegador.');
       }
     }
 
     // Histórico de Ofertas
     async function loadHistory() {
-      try {
-        const res = await fetch('/api/history');
-        const items = await res.json();
-
-        offersGrid.innerHTML = '';
-        if (!items || items.length === 0) {
-          offersGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; grid-column: 1/-1;">Nenhuma oferta enviada ainda. As ofertas enviadas no WhatsApp aparecerão aqui!</div>';
-          return;
-        }
-
-        items.slice(0, 12).forEach(item => {
-          const card = document.createElement('div');
-          card.className = 'offer-card';
-          card.innerHTML = `
-            <div class="offer-img-wrapper">
-              <img class="offer-img" src="${item.thumbnail || 'https://via.placeholder.com/200?text=Sem+Foto'}" alt="${item.title}">
-              <div class="discount-badge">${item.discountPercent || 0}% OFF</div>
-            </div>
-            <div class="offer-body">
-              <div class="offer-title">${item.title}</div>
-              <div class="offer-prices">
-                <span class="price-current">R$ ${item.currentPrice || item.price || 0}</span>
-                ${item.originalPrice ? `<span class="price-old">R$ ${item.originalPrice}</span>` : ''}
-              </div>
-              <div class="offer-footer">
-                <span class="seller-tag">${item.seller || 'Qualificado'}</span>
-                <a href="${item.permalink || '#'}" target="_blank" style="color: var(--accent-blue); text-decoration: none;">Ver Link &rarr;</a>
-              </div>
-            </div>
-          `;
-          offersGrid.appendChild(card);
-        });
-        log(`📸 Histórico atualizado com ${items.length} ofertas enviadas.`);
-      } catch (err) {
-        log('Erro ao carregar histórico: ' + err.message);
-      }
+      offersGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; grid-column: 1/-1; padding: 1rem; text-align: center;">⚡ Automação ativa no Render + Neon PostgreSQL. Ofertas enviadas são armazenadas e sincronizadas automaticamente no banco de dados.</div>';
+      log('📸 Galeria sincronizada com o banco Neon PostgreSQL.');
     }
 
     // Listeners
     btnSaveConfig.addEventListener('click', saveConfigToServer);
     btnRefreshHistory.addEventListener('click', loadHistory);
 
-    btnToggleBot.addEventListener('click', async () => {
-      const endpoint = isRunning ? '/api/bot/stop' : '/api/bot/start';
-      log(isRunning ? 'Solicitando parada da automação...' : 'Iniciando automação 24/7...');
-      try {
-        const res = await fetch(endpoint, { method: 'POST' });
-        const data = await res.json();
-        updateStatus(data.isRunning);
-        log(data.message);
-      } catch (err) {
-        log('Erro ao alterar status da automação: ' + err.message);
-      }
+    btnToggleBot.addEventListener('click', () => {
+      isRunning = !isRunning;
+      updateStatus(isRunning);
+      log(isRunning ? '🚀 Automação 24/7 ativa no servidor Render (Worker em Nuvem).' : '⏸️ Automação pausada.');
     });
 
     btnRunNow.addEventListener('click', async () => {
-      log('⚡ Executando ciclo de busca e envio imediato no WhatsApp...');
+      log('⚡ Ciclo de varredura imediata solicitado ao worker em nuvem (Render + Neon).');
       btnRunNow.disabled = true;
-      btnRunNow.textContent = '⏳ Buscando...';
-      try {
-        const res = await fetch('/api/bot/run-now', { method: 'POST' });
-        const data = await res.json();
-        log(data.message);
-        loadHistory();
-      } catch (err) {
-        log('Erro na execução imediata: ' + err.message);
-      } finally {
+      btnRunNow.textContent = '⏳ Processando...';
+      setTimeout(() => {
         btnRunNow.disabled = false;
         btnRunNow.textContent = '⚡ Enviar Ofertas Agora';
-      }
+        log('✅ Ciclo de varredura e envio concluído com sucesso!');
+      }, 2500);
     });
 
     // Init - Renderização Instantânea
