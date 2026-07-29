@@ -1139,7 +1139,9 @@
       }
     });
 
-    // Init
+    // Init - Renderização Instantânea
+    selectedCategories = getAllSubCategoryIds();
+    renderCascadeTree();
     loadConfig();
     loadHistory();
   </script>
