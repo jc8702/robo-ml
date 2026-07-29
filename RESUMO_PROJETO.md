@@ -1,10 +1,10 @@
 # RESUMO DE PROJETO: ML Ofertas Bot
 
 ## Informações Gerais
-- **Status Atual:** Correção aplicada - aguardando redeploy no Render
+- **Status Atual:** Auto-limpeza de sessão 401 aplicada e enviada para o Render
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
-- **Última Atualização:** 29/07/2026 - 10:45
+- **Última Atualização:** 29/07/2026 - 19:39
 
 ## Histórico de Alterações
 - **27/07/2026 - 15:14:** Criação da estrutura inicial do projeto.
