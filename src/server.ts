@@ -5,7 +5,7 @@ import { exec } from 'node:child_process';
 import { loadConfig, loadConfigAsync, type AppConfig } from './config/settings.js';
 import { runAutomaticCycle, startScheduler } from './scheduler/cron.js';
 import { dbSaveMultipleSettings, initDb } from './db/index.js';
-import { currentPairingCode, pairingCodeRequestedAt } from './whatsapp/client.js';
+import { currentPairingCode, pairingCodeRequestedAt, currentQrRaw } from './whatsapp/client.js';
 
 // initDb sera chamado apos o servidor subir (ver callback do listen abaixo)
 
@@ -204,6 +204,75 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
     } catch (err) {
       return sendJson({ success: false, message: 'Erro na execucao: ' + String(err) }, 500);
     }
+  }
+
+  // GET /qr - Rota visual para escanear QR Code em HD ou ver Pairing Code no navegador
+  if (method === 'GET' && (url === '/qr' || url === '/qr/')) {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    const qrImgUrl = currentQrRaw
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(currentQrRaw)}`
+      : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="6">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vincular WhatsApp - ML Ofertas Bot</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+    .card { background: #1e293b; border-radius: 16px; padding: 32px; max-width: 440px; width: 100%; text-align: center; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); border: 1px solid #334155; }
+    h1 { font-size: 22px; margin-top: 0; color: #38bdf8; }
+    p { color: #94a3b8; font-size: 14px; margin-bottom: 24px; line-height: 1.5; }
+    .qr-container { background: #ffffff; padding: 16px; border-radius: 12px; display: inline-block; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }
+    img { display: block; width: 280px; height: 280px; }
+    .code-box { background: #0f172a; border: 2px dashed #0ea5e9; border-radius: 12px; padding: 16px; margin-top: 16px; }
+    .code { font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #4ade80; margin: 8px 0; }
+    .step { text-align: left; background: #0f172a; padding: 12px 16px; border-radius: 8px; font-size: 13px; color: #cbd5e1; margin-top: 16px; }
+    .badge { display: inline-block; background: #0284c7; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: 12px; }
+    .status { font-size: 12px; color: #64748b; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">🤖 ML Ofertas Bot</span>
+    <h1>Vincular WhatsApp</h1>
+    
+    ${currentQrRaw ? `
+      <p>Abra o WhatsApp no seu celular, vá em <b>Dispositivos Vinculados > Vincular um dispositivo</b> e escaneie a imagem abaixo:</p>
+      <div class="qr-container">
+        <img src="${qrImgUrl}" alt="QR Code WhatsApp" />
+      </div>
+    ` : ''}
+
+    ${currentPairingCode ? `
+      <div class="code-box">
+        <div style="font-size: 12px; color: #94a3b8;">CÓDIGO DE PAREAMENTO:</div>
+        <div class="code">${currentPairingCode}</div>
+      </div>
+      <div class="step">
+        <b>📱 Como usar o código:</b><br>
+        1. No WhatsApp: ⚙ <b>Configurações</b><br>
+        2. Clique em <b>Dispositivos vinculados</b><br>
+        3. Clique em <b>Vincular com número de telefone</b><br>
+        4. Digite o código de 8 dígitos acima.
+      </div>
+    ` : ''}
+
+    ${!currentQrRaw && !currentPairingCode ? `
+      <div style="padding: 40px 0;">
+        <p style="color: #4ade80; font-size: 18px; font-weight: bold;">✅ WhatsApp Conectado ou Carregando...</p>
+        <p>Se você já vinculou seu aparelho, o robô está ativo e pronto!</p>
+      </div>
+    ` : ''}
+
+    <div class="status">🔄 Esta página atualiza automaticamente a cada 6 segundos.</div>
+  </div>
+</body>
+</html>`;
+    res.end(html);
+    return;
   }
 
   // GET /api/pairing-code - retorna o Pairing Code atual para vincular o WhatsApp

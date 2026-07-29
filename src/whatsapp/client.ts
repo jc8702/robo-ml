@@ -2,6 +2,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  Browsers,
   WASocket,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
@@ -21,6 +22,7 @@ const RECONNECT_DELAY_MS = 15000;
 
 export let currentPairingCode: string | null = null;
 export let pairingCodeRequestedAt: Date | null = null;
+export let currentQrRaw: string | null = null;
 
 // --- Persistencia de sessao no Neon ---
 
@@ -104,7 +106,8 @@ function printPairingCode(code: string) {
   console.log('  -> Vincular com numero de telefone');
   console.log('  -> Digite o codigo acima');
   console.log('========================================');
-  console.log('[WA] Codigo tambem em: GET /api/pairing-code\n');
+  console.log('[WA] Codigo disponivel em: /api/pairing-code');
+  console.log('[WA] QR Code visual disponivel em: /qr\n');
 }
 
 // --- Cliente WhatsApp ---
@@ -124,7 +127,7 @@ export async function initWhatsAppClient(): Promise<WASocket> {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
-  // Se WHATSAPP_PHONE tiver pelo menos 10 dígitos (com DDI), usamos Pairing Code
+  // Número de telefone para Pairing Code (com DDI, ex: 5547997896229)
   const phoneNumber = (process.env.WHATSAPP_PHONE || '').replace(/\D/g, '');
   const usePairingCode = phoneNumber.length >= 10;
 
@@ -134,14 +137,16 @@ export async function initWhatsAppClient(): Promise<WASocket> {
       auth: state,
       printQRInTerminal: false,
       logger: pino({ level: 'silent' }),
-      browser: ['ML Ofertas Bot', 'Chrome', '1.0.0'],
+      // CRÍTICO: Usa a assinatura oficial de navegador do Baileys (Ubuntu / Chrome)
+      // Necessário para o WhatsApp aceitar a validação do Pairing Code no celular
+      browser: Browsers.ubuntu('Chrome'),
       connectTimeoutMs: 60000,
       keepAliveIntervalMs: 30000,
     });
 
     // Se nao estiver registrado e tiver telefone configurado, pede o Pairing Code
     if (usePairingCode && !state.creds.registered) {
-      console.log(`[WA] Solicitando Pairing Code para +${phoneNumber}...`);
+      console.log(`[WA] Solicitando Pairing Code oficial para +${phoneNumber}...`);
       setTimeout(async () => {
         if (!sock) return;
         try {
@@ -151,11 +156,8 @@ export async function initWhatsAppClient(): Promise<WASocket> {
           printPairingCode(code);
         } catch (err) {
           console.error('[WA] Erro ao solicitar Pairing Code:', err);
-          console.log('[WA] Verifique se WHATSAPP_PHONE esta correto e tente novamente.');
         }
       }, 3000);
-    } else if (!usePairingCode && !state.creds.registered) {
-      console.log('[WA] ATENCAO: Configure WHATSAPP_PHONE no painel do Render!');
     }
 
     sock.ev.on('creds.update', async () => {
@@ -164,11 +166,18 @@ export async function initWhatsAppClient(): Promise<WASocket> {
     });
 
     sock.ev.on('connection.update', (update) => {
-      const { connection, lastDisconnect } = update;
+      const { connection, lastDisconnect, qr } = update;
+
+      // Guarda o QR Code bruto caso emitido, para exibir em /qr no navegador em alta definicao
+      if (qr) {
+        currentQrRaw = qr;
+        console.log('[WA] Novo QR Code capturado! Acesse /qr no navegador para escanear.');
+      }
 
       if (connection === 'open') {
         console.log('[WA] ✅ WhatsApp conectado com sucesso!');
         currentPairingCode = null;
+        currentQrRaw = null;
         isConnected = true;
         reconnectAttempts = 0;
         resolve(sock!);
@@ -194,7 +203,7 @@ export async function initWhatsAppClient(): Promise<WASocket> {
           isConnected = false;
           clearLocalAuth();
           clearWaAuthFromDb().then(() => {
-            console.log('[WA] Sessao limpa. Reiniciando para gerar novo Pairing Code...');
+            console.log('[WA] Sessao limpa. Reiniciando para gerar novo Pairing Code / QR Code...');
             reconnectAttempts = 0;
             initWhatsAppClient().then(resolve).catch(reject);
           });
