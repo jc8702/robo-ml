@@ -5,6 +5,7 @@ import { exec } from 'node:child_process';
 import { loadConfig, loadConfigAsync, type AppConfig } from './config/settings.js';
 import { runAutomaticCycle, startScheduler } from './scheduler/cron.js';
 import { dbSaveMultipleSettings, initDb } from './db/index.js';
+import { currentPairingCode, pairingCodeRequestedAt } from './whatsapp/client.js';
 
 // initDb sera chamado apos o servidor subir (ver callback do listen abaixo)
 
@@ -203,6 +204,18 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
     } catch (err) {
       return sendJson({ success: false, message: 'Erro na execucao: ' + String(err) }, 500);
     }
+  }
+
+  // GET /api/pairing-code - retorna o Pairing Code atual para vincular o WhatsApp
+  if (method === 'GET' && (url === '/api/pairing-code' || url.endsWith('/pairing-code'))) {
+    if (currentPairingCode) {
+      return sendJson({
+        code: currentPairingCode,
+        requestedAt: pairingCodeRequestedAt?.toISOString(),
+        instructions: 'Abra o WhatsApp > Configuracoes > Dispositivos vinculados > Vincular com numero de telefone > Digite este codigo',
+      });
+    }
+    return sendJson({ code: null, message: 'Nenhum codigo pendente. WhatsApp ja esta conectado ou ainda nao inicializou.' });
   }
 
   // Fallback 404

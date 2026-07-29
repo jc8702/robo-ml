@@ -5,7 +5,6 @@ import makeWASocket, {
   WASocket,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
-import qrcode from 'qrcode-terminal';
 import { join } from 'node:path';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { AffiliateOffer } from '../affiliate/link-converter.js';
@@ -20,6 +19,12 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY_MS = 10000;
 
+// Pairing code atual - exposto para o endpoint GET /api/pairing-code do servidor HTTP
+export let currentPairingCode: string | null = null;
+export let pairingCodeRequestedAt: Date | null = null;
+
+// ── Persistência de sessão no Neon ─────────────────────────────────────────
+
 async function restoreWaAuthFromDb() {
   const db = getDbPool();
   if (!db) return;
@@ -32,10 +37,10 @@ async function restoreWaAuthFromDb() {
         const filePath = join(AUTH_DIR, fileName);
         writeFileSync(filePath, row.value, 'utf-8');
       }
-      console.log(`[DB] Sessao do WhatsApp restaurada do Neon PostgreSQL (${res.rows.length} arquivo(s)).`);
+      console.log(`[DB] Sessao WhatsApp restaurada do Neon (${res.rows.length} arquivo(s)).`);
     }
   } catch (err) {
-    console.error('[DB] Nao foi possivel restaurar sessao do WhatsApp do Neon:', err);
+    console.error('[DB] Falha ao restaurar sessao do Neon:', err);
   }
 }
 
@@ -49,61 +54,100 @@ async function saveWaAuthToDb() {
       const content = readFileSync(filePath, 'utf-8');
       const key = `WA_AUTH_${file}`;
       await db.query(
-        `INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        `INSERT INTO app_settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
         [key, content]
       );
     }
+    console.log('[DB] Sessao WhatsApp salva no Neon.');
   } catch (err) {
-    console.error('[DB] Erro ao persistir sessao do WhatsApp no Neon:', err);
+    console.error('[DB] Falha ao salvar sessao no Neon:', err);
   }
 }
+
+// ── Cliente WhatsApp ───────────────────────────────────────────────────────
 
 export async function initWhatsAppClient(): Promise<WASocket> {
   if (sock && isConnected) return sock;
 
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    console.error(`[WA] Maximo de tentativas de reconexao atingido (${MAX_RECONNECT_ATTEMPTS}). Aguardando 60s...`);
+    console.error(`[WA] Maximo de tentativas atingido. Aguardando 60s...`);
     await new Promise((r) => setTimeout(r, 60000));
     reconnectAttempts = 0;
   }
 
-  if (!existsSync(AUTH_DIR)) {
-    mkdirSync(AUTH_DIR, { recursive: true });
-  }
+  if (!existsSync(AUTH_DIR)) mkdirSync(AUTH_DIR, { recursive: true });
 
+  // Restaura sessão salva no Neon antes de iniciar
   await restoreWaAuthFromDb();
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
+  // Número de telefone para Pairing Code (definir WHATSAPP_PHONE no Render)
+  // Formato: somente dígitos com DDI, ex: 5547999887766
+  const phoneNumber = (process.env.WHATSAPP_PHONE || '').replace(/\D/g, '');
+  const usePairingCode = phoneNumber.length >= 10;
+
+  if (usePairingCode) {
+    console.log(`[WA] Modo Pairing Code ativado para o numero: +${phoneNumber}`);
+  } else {
+    console.log('[WA] WHATSAPP_PHONE nao configurado. Defina no painel do Render como variavel de ambiente.');
+  }
+
   return new Promise((resolve, reject) => {
     sock = makeWASocket({
       version,
       auth: state,
-      printQRInTerminal: false,
+      printQRInTerminal: false, // QR ASCII desativado - usamos Pairing Code
       logger: pino({ level: 'silent' }),
       browser: ['ML Ofertas Bot', 'Chrome', '1.0.0'],
       connectTimeoutMs: 60000,
       keepAliveIntervalMs: 30000,
     });
 
+    // Persiste credenciais sempre que atualizarem
     sock.ev.on('creds.update', async () => {
       await saveCreds();
       await saveWaAuthToDb();
     });
 
-    sock.ev.on('connection.update', (update) => {
+    sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
+      // Quando o Baileys gera um QR interno, interceptamos e pedimos Pairing Code
       if (qr) {
         reconnectAttempts++;
-        console.log(`\n[WA] Escaneie o QR Code abaixo com seu WhatsApp para conectar (tentativa ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}):\n`);
-        qrcode.generate(qr, { small: true });
-        console.log('\n[WA] QR Code expira em 20 segundos. Escaneie rapido!\n');
+
+        if (usePairingCode && sock && !sock.authState.creds.registered) {
+          try {
+            const code = await sock.requestPairingCode(phoneNumber);
+            currentPairingCode = code;
+            pairingCodeRequestedAt = new Date();
+
+            console.log('\n╔══════════════════════════════════════════╗');
+            console.log('║   VINCULAR WHATSAPP — PAIRING CODE       ║');
+            console.log('╠══════════════════════════════════════════╣');
+            console.log(`║  Codigo: ${code.padEnd(30)}  ║`);
+            console.log('╠══════════════════════════════════════════╣');
+            console.log('║  No WhatsApp:                            ║');
+            console.log('║  ⚙ Configuracoes                         ║');
+            console.log('║  → Dispositivos vinculados               ║');
+            console.log('║  → Vincular com numero de telefone       ║');
+            console.log('║  → Digite o codigo acima                 ║');
+            console.log('╚══════════════════════════════════════════╝\n');
+            console.log('[WA] Codigo tambem disponivel em: GET /api/pairing-code\n');
+          } catch (err) {
+            console.error('[WA] Erro ao solicitar Pairing Code:', err);
+          }
+        } else if (!usePairingCode) {
+          console.log('[WA] ATENCAO: Configure WHATSAPP_PHONE no Render para usar Pairing Code!');
+        }
       }
 
       if (connection === 'open') {
-        console.log('[WA] WhatsApp conectado com sucesso!');
+        console.log('[WA] ✅ WhatsApp conectado com sucesso!');
+        currentPairingCode = null;
         isConnected = true;
         reconnectAttempts = 0;
         resolve(sock!);
@@ -114,20 +158,21 @@ export async function initWhatsAppClient(): Promise<WASocket> {
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-        console.log(`[WA] Conexao fechada. Motivo: ${statusCode}. Reconectando: ${shouldReconnect}`);
+        console.log(`[WA] Conexao fechada. Codigo: ${statusCode}. Reconectando: ${shouldReconnect}`);
 
         if (shouldReconnect) {
-          console.log(`[WA] Aguardando ${RECONNECT_DELAY_MS / 1000}s antes de reconectar...`);
           setTimeout(() => {
             initWhatsAppClient().then(resolve).catch(reject);
           }, RECONNECT_DELAY_MS);
         } else {
-          reject(new Error('Sessao encerrada (logged out). Remova a pasta .wa-auth e rode novamente.'));
+          reject(new Error('Sessao encerrada (logged out). Reconecte pelo pairing code.'));
         }
       }
     });
   });
 }
+
+// ── Envio de Ofertas ───────────────────────────────────────────────────────
 
 export async function sendOfferWithPhoto(
   offer: AffiliateOffer,
@@ -150,7 +195,7 @@ export async function sendOfferWithPhoto(
 
     return true;
   } catch (error) {
-    console.error(`  [WA] Erro ao enviar oferta para WhatsApp:`, error);
+    console.error(`  [WA] Erro ao enviar oferta:`, error);
     return false;
   }
 }
