@@ -1,3 +1,17 @@
 {
-  "cleanUrls": true
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/config",
+      "destination": "/api/config.ts"
+    },
+    {
+      "source": "/api/history",
+      "destination": "/api/history.ts"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Bot local para coletar ofertas do Mercado Livre e gerar mensagens com links de afiliado para WhatsApp",
   "type": "module",
-  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "ofertas": "npm run build && node dist/index.js",
