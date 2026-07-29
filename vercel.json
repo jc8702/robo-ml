@@ -1,20 +1,3 @@
 {
-  "version": 2,
-  "routes": [
-    {
-      "src": "/api/config",
-      "dest": "/api/config.ts"
-    },
-    {
-      "src": "/api/history",
-      "dest": "/api/history.ts"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/public/$1"
-    }
-  ]
+  "cleanUrls": true
 }
