@@ -47,6 +47,15 @@ async function restoreWaAuthFromDb() {
   }
 }
 
+let saveDebounceTimer: NodeJS.Timeout | null = null;
+
+function scheduleSaveWaAuthToDb() {
+  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(() => {
+    saveWaAuthToDb().catch((err) => console.error('[DB] Erro no debounce de salvamento:', err));
+  }, 2500);
+}
+
 async function saveWaAuthToDb() {
   const db = getDbPool();
   if (!db || !existsSync(AUTH_DIR)) return;
@@ -54,19 +63,23 @@ async function saveWaAuthToDb() {
     const files = readdirSync(AUTH_DIR);
     if (files.length === 0) return;
 
-    await db.query("DELETE FROM app_settings WHERE key LIKE 'WA_AUTH_%'");
-
     for (const file of files) {
       const filePath = join(AUTH_DIR, file);
-      const content = readFileSync(filePath, 'utf-8');
-      const key = `WA_AUTH_${file}`;
-      await db.query(
-        `INSERT INTO app_settings (key, value) VALUES ($1, $2)
-         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-        [key, content]
-      );
+      if (!existsSync(filePath)) continue;
+
+      try {
+        const content = readFileSync(filePath, 'utf-8');
+        const key = `WA_AUTH_${file}`;
+        await db.query(
+          `INSERT INTO app_settings (key, value) VALUES ($1, $2)
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+          [key, content]
+        );
+      } catch {
+        // Ignora se o arquivo temporario foi removido concorrentemente pelo Baileys
+      }
     }
-    console.log(`[DB] Sessao WhatsApp salva no Neon (${files.length} arquivo(s)).`);
+    console.log(`[DB] Sessao WhatsApp sincronizada com o Neon PostgreSQL (${files.length} arquivo(s)).`);
   } catch (err) {
     console.error('[DB] Falha ao salvar sessao no Neon:', err);
   }
@@ -162,7 +175,7 @@ export async function initWhatsAppClient(): Promise<WASocket> {
 
     sock.ev.on('creds.update', async () => {
       await saveCreds();
-      await saveWaAuthToDb();
+      scheduleSaveWaAuthToDb();
     });
 
     sock.ev.on('connection.update', (update) => {
