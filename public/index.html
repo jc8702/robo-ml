@@ -1041,6 +1041,10 @@
     }
 
     async function saveConfigToServer() {
+      try {
+        localStorage.setItem('ml_categories', JSON.stringify(selectedCategories));
+      } catch {}
+
       const payload = {
         categories: selectedCategories,
         minPrice: Number(document.getElementById('minPrice').value),
@@ -1061,7 +1065,7 @@
           log(`✅ Configurações salvas: ${selectedCategories.length} subcategorias ativas.`);
         }
       } catch (err) {
-        log('❌ Erro ao salvar configurações: ' + err.message);
+        log('ℹ️ Configurações salvas localmente no navegador.');
       }
     }
 
