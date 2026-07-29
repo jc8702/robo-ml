@@ -1,4 +1,12 @@
 import 'dotenv/config';
+import { dbGetSettings } from '../db/index.js';
+
+export const DEFAULT_CATEGORIES = [
+  'samsung galaxy', 'iphone', 'xiaomi', 'motorola', 'realme', 'smartwatch',
+  'airpods', 'carregador celular', 'capinha celular', 'smart tv', 'caixa de som jbl',
+  'fone bluetooth', 'soundbar', 'drone dji', 'camera de seguranca', 'fire tv stick',
+  'parafusadeira', 'jogo de ferramentas', 'serra tico tico', 'inversora de solda', 'chuveiro lorenzetti'
+];
 
 export interface FacebookConfig {
   enabled: boolean;
@@ -39,36 +47,30 @@ function parseList(value: string | undefined): string[] {
   return value.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
+/**
+ * Carrega configurações de forma síncrona (local / env) com fallback padrão de categorias.
+ */
 export function loadConfig(): AppConfig {
-  const affiliateId = process.env.ML_AFFILIATE_ID ?? '';
+  const affiliateId = process.env.ML_AFFILIATE_ID ?? '52075002';
   const accessToken = process.env.ML_ACCESS_TOKEN ?? '';
 
-  if (!affiliateId || affiliateId === 'seu-tracking-id-aqui') {
-    console.warn(
-      '\n⚠️  ATENÇÃO: ML_AFFILIATE_ID não configurado no .env!' +
-      '\n   Os links gerados NÃO terão seu tracking de afiliado.' +
-      '\n   Configure em .env para ganhar comissões.\n'
-    );
-  }
+  const parsedCat = parseList(process.env.ML_CATEGORIES);
+  const categories = parsedCat.length > 0 ? parsedCat : DEFAULT_CATEGORIES;
 
   return {
     affiliate: {
       id: affiliateId,
       source: process.env.ML_AFFILIATE_SOURCE ?? 'whatsapp',
-      word: process.env.ML_AFFILIATE_WORD ?? 'carlossilva7700',
+      word: process.env.ML_AFFILIATE_WORD ?? 'promos-wa',
     },
     filters: {
-      minDiscount: Number(process.env.ML_MIN_DISCOUNT ?? 10),
+      minDiscount: Number(process.env.ML_MIN_DISCOUNT ?? 0),
       minPrice: Number(process.env.ML_MIN_PRICE ?? 30),
-      maxPrice: Number(process.env.ML_MAX_PRICE ?? 500),
-      maxResults: Number(process.env.ML_MAX_RESULTS ?? 10),
-      categories: parseList(process.env.ML_CATEGORIES),
+      maxPrice: Number(process.env.ML_MAX_PRICE ?? 10000),
+      maxResults: Number(process.env.ML_MAX_RESULTS ?? 35),
+      categories,
     },
-    queries: parseList(process.env.ML_CATEGORIES).length > 0
-      ? parseList(process.env.ML_CATEGORIES)
-      : (parseList(process.env.ML_DEFAULT_QUERIES).length > 0
-          ? parseList(process.env.ML_DEFAULT_QUERIES)
-          : ['ofertas do dia']),
+    queries: categories,
     output: {
       format: (process.env.ML_OUTPUT_FORMAT as 'individual' | 'lista') ?? 'individual',
       autoClipboard: process.env.ML_AUTO_CLIPBOARD !== 'false',
@@ -80,10 +82,60 @@ export function loadConfig(): AppConfig {
     facebook: {
       enabled: process.env.FB_ENABLED === 'true',
       groupUrls: parseList(process.env.FB_GROUP_URLS),
-      maxGroupsPerCycle: Number(process.env.FB_MAX_GROUPS_PER_CYCLE ?? 5),
+      maxGroupsPerCycle: Number(process.env.FB_MAX_GROUPS_PER_CYCLE ?? 64),
       delayBetweenPostsSec: Number(process.env.FB_DELAY_BETWEEN_POSTS ?? 60),
       waGroupLink: process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
       autoJoin: process.env.FB_AUTO_JOIN !== 'false',
+    },
+  };
+}
+
+/**
+ * Carrega configurações mesclando o banco de dados Neon (nuvem) e fallbacks locais.
+ */
+export async function loadConfigAsync(): Promise<AppConfig> {
+  const dbSettings = await dbGetSettings();
+
+  const categoriesStr = dbSettings.ML_CATEGORIES || process.env.ML_CATEGORIES;
+  const categories = categoriesStr ? parseList(categoriesStr) : DEFAULT_CATEGORIES;
+
+  const minDiscount = Number(dbSettings.ML_MIN_DISCOUNT || process.env.ML_MIN_DISCOUNT || 0);
+  const minPrice = Number(dbSettings.ML_MIN_PRICE || process.env.ML_MIN_PRICE || 30);
+  const maxPrice = Number(dbSettings.ML_MAX_PRICE || process.env.ML_MAX_PRICE || 10000);
+  const maxResults = Number(dbSettings.ML_MAX_RESULTS || process.env.ML_MAX_RESULTS || 35);
+
+  const affiliateId = process.env.ML_AFFILIATE_ID || '52075002';
+  const accessToken = process.env.ML_ACCESS_TOKEN || '';
+
+  return {
+    affiliate: {
+      id: affiliateId,
+      source: process.env.ML_AFFILIATE_SOURCE || 'whatsapp',
+      word: process.env.ML_AFFILIATE_WORD || 'promos-wa',
+    },
+    filters: {
+      minDiscount,
+      minPrice,
+      maxPrice,
+      maxResults,
+      categories,
+    },
+    queries: categories,
+    output: {
+      format: (process.env.ML_OUTPUT_FORMAT as 'individual' | 'lista') || 'individual',
+      autoClipboard: process.env.ML_AUTO_CLIPBOARD !== 'false',
+    },
+    api: {
+      accessToken,
+      useApi: accessToken.length > 0,
+    },
+    facebook: {
+      enabled: dbSettings.FB_ENABLED ? dbSettings.FB_ENABLED === 'true' : process.env.FB_ENABLED === 'true',
+      groupUrls: dbSettings.FB_GROUP_URLS ? parseList(dbSettings.FB_GROUP_URLS) : parseList(process.env.FB_GROUP_URLS),
+      maxGroupsPerCycle: Number(dbSettings.FB_MAX_GROUPS_PER_CYCLE || process.env.FB_MAX_GROUPS_PER_CYCLE || 64),
+      delayBetweenPostsSec: Number(dbSettings.FB_DELAY_BETWEEN_POSTS || process.env.FB_DELAY_BETWEEN_POSTS || 60),
+      waGroupLink: dbSettings.FB_WA_GROUP_LINK || process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
+      autoJoin: dbSettings.FB_AUTO_JOIN ? dbSettings.FB_AUTO_JOIN === 'true' : process.env.FB_AUTO_JOIN !== 'false',
     },
   };
 }

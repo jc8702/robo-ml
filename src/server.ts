@@ -2,8 +2,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { exec } from 'node:child_process';
-import { loadConfig, type AppConfig } from './config/settings.js';
+import { loadConfig, loadConfigAsync, type AppConfig } from './config/settings.js';
 import { runAutomaticCycle, startScheduler } from './scheduler/cron.js';
+import { dbSaveMultipleSettings, initDb } from './db/index.js';
+
+// Auto-inicializa tabelas do Neon na inicialização do servidor HTTP
+initDb().catch(console.error);
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const PUBLIC_DIR = join(process.cwd(), 'public');
@@ -30,24 +34,26 @@ function parseJsonBody(req: IncomingMessage): Promise<any> {
 }
 
 /**
- * Atualiza chaves específicas no arquivo .env
+ * Atualiza chaves específicas no arquivo .env se estiver em ambiente local com escrita
  */
 function updateEnvFile(updates: Record<string, string | number>): void {
   if (!existsSync(ENV_FILE)) return;
 
-  let content = readFileSync(ENV_FILE, 'utf-8');
+  try {
+    let content = readFileSync(ENV_FILE, 'utf-8');
 
-  for (const [key, value] of Object.entries(updates)) {
-    const valStr = String(value);
-    const regex = new RegExp(`^${key}=.*$`, 'm');
-    if (regex.test(content)) {
-      content = content.replace(regex, `${key}=${valStr}`);
-    } else {
-      content += `\n${key}=${valStr}`;
+    for (const [key, value] of Object.entries(updates)) {
+      const valStr = String(value);
+      const regex = new RegExp(`^${key}=.*$`, 'm');
+      if (regex.test(content)) {
+        content = content.replace(regex, `${key}=${valStr}`);
+      } else {
+        content += `\n${key}=${valStr}`;
+      }
     }
-  }
 
-  writeFileSync(ENV_FILE, content, 'utf-8');
+    writeFileSync(ENV_FILE, content, 'utf-8');
+  } catch { /* ignora erro de sistema de arquivos em nuvem somente leitura */ }
 }
 
 /**
@@ -96,7 +102,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
   // GET /api/config
   if (method === 'GET' && url === '/api/config') {
-    const config = loadConfig();
+    const config = await loadConfigAsync();
     return sendJson({
       categories: config.filters.categories,
       queries: config.queries,
@@ -121,25 +127,30 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   if (method === 'POST' && url === '/api/config') {
     try {
       const body = await parseJsonBody(req);
-      const updates: Record<string, string | number> = {};
+      const updates: Record<string, string> = {};
 
       if (Array.isArray(body.categories)) {
         updates.ML_CATEGORIES = body.categories.join(',');
       }
-      if (typeof body.minPrice === 'number') updates.ML_MIN_PRICE = body.minPrice;
-      if (typeof body.maxPrice === 'number') updates.ML_MAX_PRICE = body.maxPrice;
-      if (typeof body.minDiscount === 'number') updates.ML_MIN_DISCOUNT = body.minDiscount;
-      if (typeof body.maxResults === 'number') updates.ML_MAX_RESULTS = body.maxResults;
+      if (typeof body.minPrice === 'number') updates.ML_MIN_PRICE = String(body.minPrice);
+      if (typeof body.maxPrice === 'number') updates.ML_MAX_PRICE = String(body.maxPrice);
+      if (typeof body.minDiscount === 'number') updates.ML_MIN_DISCOUNT = String(body.minDiscount);
+      if (typeof body.maxResults === 'number') updates.ML_MAX_RESULTS = String(body.maxResults);
       if (typeof body.cronSchedule === 'string') updates.AUTO_SCHEDULE_CRON = body.cronSchedule;
       if (typeof body.fbEnabled === 'boolean') updates.FB_ENABLED = body.fbEnabled ? 'true' : 'false';
       if (Array.isArray(body.fbGroupUrls)) updates.FB_GROUP_URLS = body.fbGroupUrls.join(',');
-      if (typeof body.fbMaxGroupsPerCycle === 'number') updates.FB_MAX_GROUPS_PER_CYCLE = body.fbMaxGroupsPerCycle;
-      if (typeof body.fbDelayBetweenPosts === 'number') updates.FB_DELAY_BETWEEN_POSTS = body.fbDelayBetweenPosts;
+      if (typeof body.fbMaxGroupsPerCycle === 'number') updates.FB_MAX_GROUPS_PER_CYCLE = String(body.fbMaxGroupsPerCycle);
+      if (typeof body.fbDelayBetweenPosts === 'number') updates.FB_DELAY_BETWEEN_POSTS = String(body.fbDelayBetweenPosts);
       if (typeof body.fbWaGroupLink === 'string') updates.FB_WA_GROUP_LINK = body.fbWaGroupLink;
       if (typeof body.fbAutoJoin === 'boolean') updates.FB_AUTO_JOIN = body.fbAutoJoin ? 'true' : 'false';
 
+      // Salva no banco de dados Neon (PostgreSQL na Nuvem)
+      await dbSaveMultipleSettings(updates);
+
+      // Também tenta salvar no arquivo .env se estiver em sistema de arquivos gravável
       updateEnvFile(updates);
-      return sendJson({ success: true, message: 'Configurações atualizadas no .env' });
+
+      return sendJson({ success: true, message: 'Configurações atualizadas no Neon PostgreSQL' });
     } catch (err) {
       return sendJson({ success: false, error: String(err) }, 400);
     }
