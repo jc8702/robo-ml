@@ -14,8 +14,8 @@ COPY . .
 # Compila o projeto TypeScript para dist/
 RUN npm run build
 
-# Expõe porta padrão se necessário
+# Expõe porta para health check do Render
 EXPOSE 3000
 
-# Executa o robô em modo de automação contínua 24/7
-CMD ["node", "dist/index.js", "--auto"]
+# Executa o servidor HTTP que também inicia o bot em modo automação
+CMD ["node", "dist/server.js"]

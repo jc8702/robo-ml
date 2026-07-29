@@ -6,8 +6,7 @@ import { loadConfig, loadConfigAsync, type AppConfig } from './config/settings.j
 import { runAutomaticCycle, startScheduler } from './scheduler/cron.js';
 import { dbSaveMultipleSettings, initDb } from './db/index.js';
 
-// Auto-inicializa tabelas do Neon na inicialização do servidor HTTP
-initDb().catch(console.error);
+// initDb sera chamado apos o servidor subir (ver callback do listen abaixo)
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const PUBLIC_DIR = join(process.cwd(), 'public');
@@ -16,9 +15,6 @@ const HISTORY_FILE = join(process.cwd(), '.sent-history.json');
 
 let isBotRunning = false;
 
-/**
- * Lê o corpo JSON de requisições POST.
- */
 function parseJsonBody(req: IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -33,9 +29,6 @@ function parseJsonBody(req: IncomingMessage): Promise<any> {
   });
 }
 
-/**
- * Atualiza chaves específicas no arquivo .env se estiver em ambiente local com escrita
- */
 function updateEnvFile(updates: Record<string, string | number>): void {
   if (!existsSync(ENV_FILE)) return;
 
@@ -56,14 +49,10 @@ function updateEnvFile(updates: Record<string, string | number>): void {
   } catch { /* ignora erro de sistema de arquivos em nuvem somente leitura */ }
 }
 
-/**
- * Servidor HTTP Principal & Handler para Vercel Serverless
- */
 export async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = req.url || '/';
   const method = req.method || 'GET';
 
-  // Helper para JSON response
   const sendJson = (data: any, status = 200) => {
     res.writeHead(status, {
       'Content-Type': 'application/json',
@@ -84,7 +73,13 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
     return;
   }
 
-  // Static Files (HTML / CSS / JS) - Apenas se não for endpoint de API
+  // Health check endpoint para Render
+  if (method === 'GET' && url === '/') {
+    sendJson({ status: 'ok', bot: isBotRunning ? 'running' : 'stopped' });
+    return;
+  }
+
+  // Static Files (HTML / CSS / JS)
   if (method === 'GET' && !url.startsWith('/api/')) {
     let filePath = join(PUBLIC_DIR, url === '/' ? 'index.html' : url);
     if (!existsSync(filePath)) {
@@ -112,8 +107,6 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       return;
     }
   }
-
-  // --- API ENDPOINTS ---
 
   // GET /api/config
   if (method === 'GET' && (url === '/api/config' || url.endsWith('/config'))) {
@@ -159,13 +152,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       if (typeof body.fbWaGroupLink === 'string') updates.FB_WA_GROUP_LINK = body.fbWaGroupLink;
       if (typeof body.fbAutoJoin === 'boolean') updates.FB_AUTO_JOIN = body.fbAutoJoin ? 'true' : 'false';
 
-      // Salva no banco de dados Neon (PostgreSQL na Nuvem)
       await dbSaveMultipleSettings(updates);
-
-      // Também tenta salvar no arquivo .env se estiver em sistema de arquivos gravável
       updateEnvFile(updates);
 
-      return sendJson({ success: true, message: 'Configurações atualizadas no Neon PostgreSQL' });
+      return sendJson({ success: true, message: 'Configuracoes atualizadas no Neon PostgreSQL' });
     } catch (err) {
       return sendJson({ success: false, error: String(err) }, 400);
     }
@@ -192,13 +182,13 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       const config = loadConfig();
       startScheduler(config).catch((err) => console.error('Erro ao iniciar agendador:', err));
     }
-    return sendJson({ isRunning: true, message: '🤖 Automação iniciada com sucesso!' });
+    return sendJson({ isRunning: true, message: 'Automacao iniciada com sucesso!' });
   }
 
   // POST /api/bot/stop
   if (method === 'POST' && (url === '/api/bot/stop' || url.endsWith('/stop'))) {
     isBotRunning = false;
-    return sendJson({ isRunning: false, message: '⏹️ Automação pausada.' });
+    return sendJson({ isRunning: false, message: 'Automacao pausada.' });
   }
 
   // POST /api/bot/run-now
@@ -207,34 +197,46 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       const config = loadConfig();
       runAutomaticCycle(config)
         .then(() => {})
-        .catch((err) => console.error('Erro na execução manual:', err));
+        .catch((err) => console.error('Erro na execucao manual:', err));
 
-      return sendJson({ success: true, message: '⚡ Busca executada! Verifique seu grupo do WhatsApp.' });
+      return sendJson({ success: true, message: 'Busca executada! Verifique seu grupo do WhatsApp.' });
     } catch (err) {
-      return sendJson({ success: false, message: 'Erro na execução: ' + String(err) }, 500);
+      return sendJson({ success: false, message: 'Erro na execucao: ' + String(err) }, 500);
     }
   }
 
   // Fallback 404
   res.writeHead(404);
-  res.end('Endpoint não encontrado.');
+  res.end('Endpoint nao encontrado.');
 }
 
 const server = createServer(handleRequest);
 
-// Inicia o servidor localmente (apenas fora da Vercel)
+// Inicia o servidor (local ou Render)
 if (process.env.VERCEL !== '1') {
-  server.listen(PORT, () => {
-    const url = `http://localhost:${PORT}`;
+  // CRÍTICO: Render exige bind em 0.0.0.0, não em localhost
+  server.listen(PORT, '0.0.0.0', async () => {
+    const url = `http://0.0.0.0:${PORT}`;
     console.log('\n======================================================');
-    console.log(`🚀 Painel de Controle ML Ofertas Bot rodando em:`);
-    console.log(`👉 ${url}`);
+    console.log(`Painel de Controle ML Ofertas Bot rodando em:`);
+    console.log(`  http://localhost:${PORT}`);
     console.log('======================================================\n');
 
-    // Abre navegador padrão automaticamente no Windows se for execução local CLI
+    // Inicializa banco de dados apos o servidor estar no ar
+    await initDb().catch(console.error);
+
+    // Abre navegador padrao automaticamente no Windows se for execucao local CLI
     if (process.argv.includes('--open')) {
-      const openCmd = process.platform === 'win32' ? `start ${url}` : `open ${url}`;
+      const openCmd = process.platform === 'win32' ? `start http://localhost:${PORT}` : `open http://localhost:${PORT}`;
       exec(openCmd, () => {});
+    }
+
+    // Auto-inicia o bot no Render (ou se AUTO_START=true)
+    if (process.env.RENDER || process.env.AUTO_START === 'true') {
+      console.log('[BOT] Auto-iniciando bot de ofertas...');
+      isBotRunning = true;
+      const config = loadConfig();
+      startScheduler(config).catch((err) => console.error('Erro ao iniciar agendador:', err));
     }
   });
 }

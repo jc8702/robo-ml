@@ -1,10 +1,11 @@
 services:
-  - type: worker
-    name: robo-ml-worker
+  - type: web
+    name: robo-ml-bot
     env: docker
     dockerfilePath: ./Dockerfile
     plan: free
     autoDeploy: true
+    healthCheckPath: /
     envVars:
       - key: DATABASE_URL
         value: postgresql://neondb_owner:npg_0SIXLDvOk3tl@ep-sparkling-silence-ac0kw825-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require

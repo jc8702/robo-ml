@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "start": "node dist/server.js",
     "ofertas": "npm run build && node dist/index.js",
     "ofertas:query": "npm run build && node dist/index.js --query",
     "auto": "npm run build && node dist/index.js --auto",

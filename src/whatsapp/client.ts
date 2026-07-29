@@ -16,6 +16,9 @@ const AUTH_DIR = join(process.cwd(), '.wa-auth');
 
 let sock: WASocket | null = null;
 let isConnected = false;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY_MS = 10000;
 
 async function restoreWaAuthFromDb() {
   const db = getDbPool();
@@ -29,10 +32,10 @@ async function restoreWaAuthFromDb() {
         const filePath = join(AUTH_DIR, fileName);
         writeFileSync(filePath, row.value, 'utf-8');
       }
-      console.log(`📦 Sessão do WhatsApp restaurada do Neon PostgreSQL (${res.rows.length} arquivo(s)).`);
+      console.log(`[DB] Sessao do WhatsApp restaurada do Neon PostgreSQL (${res.rows.length} arquivo(s)).`);
     }
   } catch (err) {
-    console.error('⚠️ Não foi possível restaurar sessão do WhatsApp do Neon:', err);
+    console.error('[DB] Nao foi possivel restaurar sessao do WhatsApp do Neon:', err);
   }
 }
 
@@ -51,16 +54,18 @@ async function saveWaAuthToDb() {
       );
     }
   } catch (err) {
-    console.error('⚠️ Erro ao persistir sessão do WhatsApp no Neon:', err);
+    console.error('[DB] Erro ao persistir sessao do WhatsApp no Neon:', err);
   }
 }
 
-/**
- * Inicializa a conexão com o WhatsApp via Baileys.
- * Exibe QR Code no terminal para conexão inicial.
- */
 export async function initWhatsAppClient(): Promise<WASocket> {
   if (sock && isConnected) return sock;
+
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.error(`[WA] Maximo de tentativas de reconexao atingido (${MAX_RECONNECT_ATTEMPTS}). Aguardando 60s...`);
+    await new Promise((r) => setTimeout(r, 60000));
+    reconnectAttempts = 0;
+  }
 
   if (!existsSync(AUTH_DIR)) {
     mkdirSync(AUTH_DIR, { recursive: true });
@@ -78,6 +83,8 @@ export async function initWhatsAppClient(): Promise<WASocket> {
       printQRInTerminal: false,
       logger: pino({ level: 'silent' }),
       browser: ['ML Ofertas Bot', 'Chrome', '1.0.0'],
+      connectTimeoutMs: 60000,
+      keepAliveIntervalMs: 30000,
     });
 
     sock.ev.on('creds.update', async () => {
@@ -89,13 +96,16 @@ export async function initWhatsAppClient(): Promise<WASocket> {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        console.log('\n📱 Escaneie o QR Code abaixo com seu WhatsApp para conectar:\n');
+        reconnectAttempts++;
+        console.log(`\n[WA] Escaneie o QR Code abaixo com seu WhatsApp para conectar (tentativa ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}):\n`);
         qrcode.generate(qr, { small: true });
+        console.log('\n[WA] QR Code expira em 20 segundos. Escaneie rapido!\n');
       }
 
       if (connection === 'open') {
-        console.log('✅ WhatsApp conectado com sucesso!');
+        console.log('[WA] WhatsApp conectado com sucesso!');
         isConnected = true;
+        reconnectAttempts = 0;
         resolve(sock!);
       }
 
@@ -104,21 +114,21 @@ export async function initWhatsAppClient(): Promise<WASocket> {
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-        console.log(`⚠️ Conexão fechada. Motivo: ${statusCode}. Reconectando: ${shouldReconnect}`);
+        console.log(`[WA] Conexao fechada. Motivo: ${statusCode}. Reconectando: ${shouldReconnect}`);
 
         if (shouldReconnect) {
-          initWhatsAppClient().then(resolve).catch(reject);
+          console.log(`[WA] Aguardando ${RECONNECT_DELAY_MS / 1000}s antes de reconectar...`);
+          setTimeout(() => {
+            initWhatsAppClient().then(resolve).catch(reject);
+          }, RECONNECT_DELAY_MS);
         } else {
-          reject(new Error('Sessão encerrada (logged out). Remova a pasta .wa-auth e rode novamente.'));
+          reject(new Error('Sessao encerrada (logged out). Remova a pasta .wa-auth e rode novamente.'));
         }
       }
     });
   });
 }
 
-/**
- * Envia uma oferta com foto e legenda para um grupo ou chat no WhatsApp.
- */
 export async function sendOfferWithPhoto(
   offer: AffiliateOffer,
   targetJid: string
@@ -132,28 +142,25 @@ export async function sendOfferWithPhoto(
         image: { url: offer.thumbnail },
         caption: caption,
       });
-      console.log(`  📸 Foto + Oferta enviada: "${offer.title.substring(0, 30)}..."`);
+      console.log(`  [WA] Foto + Oferta enviada: "${offer.title.substring(0, 30)}..."`);
     } else {
       await client.sendMessage(targetJid, { text: caption });
-      console.log(`  📝 Oferta enviada (sem foto): "${offer.title.substring(0, 30)}..."`);
+      console.log(`  [WA] Oferta enviada (sem foto): "${offer.title.substring(0, 30)}..."`);
     }
 
     return true;
   } catch (error) {
-    console.error(`  ❌ Erro ao enviar oferta para WhatsApp:`, error);
+    console.error(`  [WA] Erro ao enviar oferta para WhatsApp:`, error);
     return false;
   }
 }
 
-/**
- * Lista todos os grupos onde o bot está presente para ajudar a encontrar o JID do grupo.
- */
 export async function listGroups(): Promise<void> {
   const client = await initWhatsAppClient();
   const groupMetadata = await client.groupFetchAllParticipating();
 
-  console.log('\n📋 Grupos de WhatsApp Encontrados:');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('\n[WA] Grupos de WhatsApp Encontrados:');
+  console.log('--------------------------------------');
 
   const groups = Object.values(groupMetadata);
   if (groups.length === 0) {
@@ -162,8 +169,8 @@ export async function listGroups(): Promise<void> {
   }
 
   for (const group of groups) {
-    console.log(`📍 Nome: ${group.subject}`);
-    console.log(`   ID:   ${group.id}`);
-    console.log('────────────────────────────────────────');
+    console.log(`Nome: ${group.subject}`);
+    console.log(`ID:   ${group.id}`);
+    console.log('--------------------------------------');
   }
 }
