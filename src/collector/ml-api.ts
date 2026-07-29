@@ -24,65 +24,91 @@ export interface MLOffer {
 const BROWSER_PROFILE_DIR = join(process.cwd(), '.chrome-profile');
 
 /**
- * Encontra o Chrome/Chromium no sistema.
+ * Encontra o Chrome/Chromium no sistema (Windows ou Linux/Docker/Render).
  */
-function findBrowserPath(): string {
-  const homeDir = homedir();
-
-  const candidates: string[] = [];
-
-  // Playwright Chromium
-  const pwDir = join(homeDir, 'AppData', 'Local', 'ms-playwright');
-  if (existsSync(pwDir)) {
-    const dirs = readdirSync(pwDir)
-      .filter((d: string) => d.startsWith('chromium') && !d.includes('headless'))
-      .sort();
-    for (const dir of dirs.reverse()) {
-      candidates.push(join(pwDir, dir, 'chrome-win', 'chrome.exe'));
-    }
+function findBrowserPath(): string | undefined {
+  if (process.env.EXECUTABLE_PATH && existsSync(process.env.EXECUTABLE_PATH)) {
+    return process.env.EXECUTABLE_PATH;
   }
 
-  // Chrome do sistema
-  candidates.push(
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    join(homeDir, 'AppData', 'Local', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-  );
+  const homeDir = homedir();
+  const candidates: string[] = [];
+
+  if (process.platform === 'win32') {
+    const pwDir = join(homeDir, 'AppData', 'Local', 'ms-playwright');
+    if (existsSync(pwDir)) {
+      const dirs = readdirSync(pwDir)
+        .filter((d: string) => d.startsWith('chromium'))
+        .sort();
+      for (const dir of dirs.reverse()) {
+        candidates.push(join(pwDir, dir, 'chrome-win', 'chrome.exe'));
+      }
+    }
+    candidates.push(
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      join(homeDir, 'AppData', 'Local', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    );
+  } else {
+    // Linux / Docker / Render
+    const pwDir = '/ms-playwright';
+    if (existsSync(pwDir)) {
+      try {
+        const dirs = readdirSync(pwDir)
+          .filter((d: string) => d.startsWith('chromium'))
+          .sort();
+        for (const dir of dirs.reverse()) {
+          candidates.push(join(pwDir, dir, 'chrome-linux', 'chrome'));
+        }
+      } catch {}
+    }
+    candidates.push(
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium'
+    );
+  }
 
   for (const p of candidates) {
     if (existsSync(p)) return p;
   }
 
-  throw new Error('Chrome/Chromium não encontrado. Instale Chrome ou execute: npx playwright install chromium');
+  return undefined;
 }
 
 /**
  * Abre browser com perfil persistente.
- * A primeira execução fica VISÍVEL para o usuário fazer login/verificação.
- * As execuções seguintes reutilizam o perfil.
+ * No Render/Linux usa headless: true; em dev Windows pode ser visivel.
  */
 async function openBrowser(): Promise<BrowserContext> {
   const executablePath = findBrowserPath();
+  const isCloud = !!process.env.RENDER || process.env.HEADLESS === 'true' || process.platform !== 'win32';
 
   if (!existsSync(BROWSER_PROFILE_DIR)) {
     mkdirSync(BROWSER_PROFILE_DIR, { recursive: true });
   }
 
-  // launchPersistentContext mantém TUDO: cookies, localStorage, sessions
-  // MVP: sempre visível — o ML detecta headless com muita agressividade
-  const context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, {
-    headless: false,
-    executablePath,
+  const launchOptions: any = {
+    headless: isCloud,
     locale: 'pt-BR',
     viewport: { width: 1366, height: 768 },
     args: [
       '--no-sandbox',
+      '--disable-setuid-sandbox',
       '--disable-blink-features=AutomationControlled',
       '--disable-infobars',
       '--disable-dev-shm-usage',
+      '--disable-gpu',
     ],
     ignoreDefaultArgs: ['--enable-automation'],
-  });
+  };
+
+  if (executablePath) {
+    launchOptions.executablePath = executablePath;
+  }
+
+  const context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, launchOptions);
 
   // Stealth: esconde sinais de automação
   await context.addInitScript(() => {
