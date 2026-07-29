@@ -987,13 +987,26 @@
       inputCustomCategory.value = '';
     });
 
+    function getAllSubCategoryIds() {
+      const ids = [];
+      CASCADE_DATA.forEach(cat => {
+        cat.subs.forEach(s => ids.push(s.id));
+      });
+      return ids;
+    }
+
     // API Config
     async function loadConfig() {
       try {
         const res = await fetch('/api/config');
         const data = await res.json();
 
-        selectedCategories = data.categories || [];
+        if (Array.isArray(data.categories) && data.categories.length > 0) {
+          selectedCategories = data.categories;
+        } else {
+          selectedCategories = getAllSubCategoryIds();
+        }
+
         renderCascadeTree();
 
         document.getElementById('minPrice').value = data.minPrice ?? 30;

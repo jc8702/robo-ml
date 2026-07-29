@@ -2,10 +2,34 @@ import 'dotenv/config';
 import { dbGetSettings } from '../db/index.js';
 
 export const DEFAULT_CATEGORIES = [
-  'samsung galaxy', 'iphone', 'xiaomi', 'motorola', 'realme', 'smartwatch',
-  'airpods', 'carregador celular', 'capinha celular', 'smart tv', 'caixa de som jbl',
-  'fone bluetooth', 'soundbar', 'drone dji', 'camera de seguranca', 'fire tv stick',
-  'parafusadeira', 'jogo de ferramentas', 'serra tico tico', 'inversora de solda', 'chuveiro lorenzetti'
+  // Celulares & Telefones
+  'iphone', 'samsung galaxy', 'xiaomi', 'motorola', 'realme', 'smartwatch', 'airpods', 'carregador celular', 'capinha celular',
+  // Informática & Computação
+  'notebook gamer', 'pc gamer', 'monitor gamer', 'placa de video', 'processador intel ryzen', 'ssd nvme', 'teclado mecanico', 'impressora', 'roteador wifi',
+  // Games & Consoles
+  'playstation 5', 'xbox series', 'nintendo switch', 'steam deck', 'cadeira gamer', 'volante logitech',
+  // Eletrônicos & Áudio
+  'smart tv', 'caixa de som jbl', 'fone bluetooth', 'soundbar', 'drone dji', 'camera de seguranca', 'fire tv stick',
+  // Eletrodomésticos
+  'air fryer', 'cafeteira', 'aspirador robo', 'geladeira', 'lava e seca', 'cooktop', 'ar condicionado', 'liquidificador',
+  // Casa & Móveis
+  'sofa retratil', 'colchao queen king', 'guarda roupa', 'mesa de jantar', 'lampada smart', 'jogo de cama',
+  // Ferramentas
+  'parafusadeira', 'jogo de ferramentas', 'serra tico tico', 'inversora de solda', 'chuveiro lorenzetti',
+  // Beleza & Cuidado Pessoal
+  'barbeador eletrico', 'secador de cabelo', 'perfume importado', 'skincare', 'maquiagem',
+  // Saúde & Suplementos
+  'whey protein', 'creatina', 'pre treino', 'vitamina c d3',
+  // Esportes & Fitness
+  'bicicleta aro 29', 'kit halteres', 'tenis corrida', 'barraca camping', 'bola futebol',
+  // Moda & Calçados
+  'tenis casual', 'camiseta masculina', 'vestido feminino', 'mochila notebook', 'relogio casio',
+  // Bebês & Infantil
+  'carrinho de bebe', 'brinquedo fisher price', 'lego', 'mamadeira avent',
+  // Automotivo
+  'pneu aro', 'multimidia android', 'oleo motor 5w30', 'estetica automotiva',
+  // Pet Shop
+  'racao caes', 'racao gatos', 'caminha pet'
 ];
 
 export interface FacebookConfig {
