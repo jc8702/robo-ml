@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ML Ofertas Bot — Árvore Completa de Categorias & Subcategorias</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --bg-card: rgba(30, 41, 59, 0.7);
+      --border-card: rgba(255, 255, 255, 0.1);
+      --ml-yellow: #ffe600;
+      --ml-blue: #2d3277;
+      --wa-green: #25d366;
+      --accent-blue: #3b82f6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(37, 211, 102, 0.12) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1240px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-card);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      font-size: 2rem;
+      background: linear-gradient(135deg, var(--ml-yellow), #f59e0b);
+      border-radius: 12px;
+      padding: 0.5rem 0.75rem;
+    }
+
+    .brand h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      background: linear-gradient(to right, #ffffff, #cbd5e1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      backdrop-filter: blur(12px);
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--danger);
+      box-shadow: 0 0 10px var(--danger);
+    }
+
+    .status-dot.active {
+      background-color: var(--wa-green);
+      box-shadow: 0 0 10px var(--wa-green);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--wa-green), #16a34a);
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(37, 211, 102, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(37, 211, 102, 0.4);
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid var(--border-card);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(51, 65, 85, 0.8);
+    }
+
+    .btn-warning {
+      background: linear-gradient(135deg, var(--ml-yellow), #eab308);
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      margin-bottom: 1.5rem;
+    }
+
+    .card-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+      color: #ffffff;
+    }
+
+    /* TREE CASCADE STYLES */
+    .search-filter-box {
+      margin-bottom: 1.25rem;
+    }
+
+    .search-filter-box input {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border-card);
+      border-radius: 10px;
+      padding: 0.85rem 1.25rem;
+      color: #ffffff;
+      font-size: 0.95rem;
+      outline: none;
+    }
+
+    .search-filter-box input:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    .cascade-tree {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      max-height: 560px;
+      overflow-y: auto;
+      padding-right: 0.5rem;
+    }
+
+    /* Scrollbar estilizada */
+    .cascade-tree::-webkit-scrollbar {
+      width: 8px;
+    }
+    .cascade-tree::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+      border-radius: 4px;
+    }
+    .cascade-tree::-webkit-scrollbar-thumb {
+      background: rgba(59, 130, 246, 0.4);
+      border-radius: 4px;
+    }
+
+    .parent-node {
+      flex-shrink: 0; /* IMPEDE A COMPRESSÃO VERTICAL DOS CARDS DA ÁRVORE */
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .parent-node:hover {
+      border-color: rgba(59, 130, 246, 0.5);
+      background: rgba(30, 41, 59, 0.8);
+    }
+
+    .parent-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.25rem;
+      min-height: 56px;
+      cursor: pointer;
+      user-select: none;
+      background: rgba(30, 41, 59, 0.5);
+    }
+
+    .parent-left {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: #ffffff;
+    }
+
+    .parent-toggle-icon {
+      color: var(--text-muted);
+      transition: transform 0.2s ease;
+      font-size: 0.85rem;
+      width: 16px;
+      text-align: center;
+    }
+
+    .parent-node.open .parent-toggle-icon {
+      transform: rotate(90deg);
+      color: var(--accent-blue);
+    }
+
+    .badge-count {
+      font-size: 0.78rem;
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      padding: 0.3rem 0.75rem;
+      border-radius: 9999px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .subcategories-list {
+      display: none;
+      padding: 1rem 1.25rem 1.25rem 2.75rem;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 0.75rem;
+      border-top: 1px solid var(--border-card);
+      background: rgba(15, 23, 42, 0.4);
+    }
+
+    .parent-node.open .subcategories-list {
+      display: grid;
+    }
+
+    .sub-item {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      font-size: 0.875rem;
+      color: var(--text-main);
+      cursor: pointer;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      background: rgba(30, 41, 59, 0.4);
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+
+    .sub-item:hover {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.3);
+    }
+
+    .sub-item input[type="checkbox"], .parent-header input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--wa-green);
+      cursor: pointer;
+    }
+
+    /* Active Selection Summary Bar */
+    .selection-summary-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      padding: 0.75rem;
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 10px;
+      border: 1px solid var(--border-card);
+      min-height: 44px;
+      margin-bottom: 1rem;
+      align-items: center;
+    }
+
+    .active-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: linear-gradient(135deg, rgba(37, 211, 102, 0.2), rgba(59, 130, 246, 0.2));
+      border: 1px solid var(--wa-green);
+      color: #ffffff;
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .active-chip-remove {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-weight: bold;
+    }
+
+    .active-chip-remove:hover {
+      color: var(--danger);
+    }
+
+    /* Form Fields */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .field label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    input[type="text"], input[type="number"], select {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-card);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      color: var(--text-main);
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    input[type="text"]:focus, input[type="number"]:focus, select:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    /* Offers Gallery */
+    .offers-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 1rem;
+    }
+
+    .offer-card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s ease;
+    }
+
+    .offer-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(59, 130, 246, 0.5);
+    }
+
+    .offer-img-wrapper {
+      position: relative;
+      height: 160px;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+    }
+
+    .offer-img {
+      max-height: 100%;
+      max-width: 100%;
+      object-fit: contain;
+    }
+
+    .discount-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: var(--danger);
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 6px;
+    }
+
+    .offer-body {
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      justify-content: space-between;
+    }
+
+    .offer-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      line-height: 1.3;
+      margin-bottom: 0.75rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .offer-prices {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .price-current {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--wa-green);
+    }
+
+    .price-old {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-decoration: line-through;
+    }
+
+    .offer-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 0.5rem;
+    }
+
+    .seller-tag {
+      color: var(--ml-yellow);
+      font-weight: 600;
+    }
+
+    /* Console Activity Log */
+    .console-box {
+      background: #020617;
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      padding: 1rem;
+      font-family: monospace;
+      font-size: 0.8rem;
+      height: 140px;
+      overflow-y: auto;
+      color: #38bdf8;
+      line-height: 1.5;
+    }
+
+    .log-line {
+      margin-bottom: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- HEADER -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon">🛒</div>
+        <div>
+          <h1>ML Ofertas Bot</h1>
+          <p>Catálogo Completo de Categorias & Subcategorias Mercado Livre</p>
+        </div>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-badge">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Verificando...</span>
+        </div>
+
+        <button class="btn btn-warning" id="btnRunNow">⚡ Enviar Ofertas Agora</button>
+        <button class="btn btn-primary" id="btnToggleBot">▶️ Iniciar Automação</button>
+      </div>
+    </header>
+
+    <!-- CARD 1: SELETOR EM CASCATA COMPLETO -->
+    <div class="card">
+      <div class="card-title">
+        <span>🌳 Árvore Completa de Categorias & Subcategorias</span>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" id="btnExpandAll">📂 Expandir Todas</button>
+          <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" id="btnUnselectAll">🔲 Limpar Seleção</button>
+        </div>
+      </div>
+
+      <!-- Filtro Rápido por Texto na Árvore -->
+      <div class="search-filter-box">
+        <input type="text" id="inputTreeSearch" placeholder="🔍 Filtrar subcategorias na tela (ex: iphone, whey, tv, notebook gamer...)...">
+      </div>
+
+      <!-- Resumo das Subcategorias Selecionadas -->
+      <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.35rem; font-weight: 500;">
+        Filtros Ativos para a Próxima Varredura:
+      </div>
+      <div class="selection-summary-bar" id="selectionSummary">
+        <!-- Chips ativos serão renderizados aqui -->
+      </div>
+
+      <!-- ÁRVORE EM CASCATA DE CATEGORIAS E SUBCATEGORIAS COMPLETA -->
+      <div class="cascade-tree" id="cascadeTree">
+        <!-- Inserido dinamicamente via JS -->
+      </div>
+
+      <!-- INCLUIR TERMO DE NICHO CUSTOMIZADO -->
+      <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-card); display: flex; gap: 0.75rem; align-items: center;">
+        <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500; min-width: 140px;">➕ Adicionar Subnicho:</span>
+        <input type="text" id="inputCustomCategory" placeholder="Ex: iphone 16 pro max, placa rtx 4060, tênis olympikus..." style="flex: 1;">
+        <button class="btn btn-secondary" id="btnAddCustom">+ Incluir</button>
+      </div>
+    </div>
+
+    <!-- CARD 2: FILTROS E CONFIGURAÇÃO -->
+    <div class="card">
+      <div class="card-title">
+        <span>⚙️ Filtros de Oferta & Agendamento</span>
+        <button class="btn btn-primary" style="padding: 0.45rem 1rem; font-size: 0.85rem;" id="btnSaveConfig">💾 Salvar Alterações</button>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="minPrice">Preço Mínimo (R$)</label>
+          <input type="number" id="minPrice" value="30">
+        </div>
+
+        <div class="field">
+          <label for="maxPrice">Preço Máximo (R$)</label>
+          <input type="number" id="maxPrice" value="500">
+        </div>
+
+        <div class="field">
+          <label for="minDiscount">Desconto Mínimo (%)</label>
+          <input type="number" id="minDiscount" value="10">
+        </div>
+
+        <div class="field">
+          <label for="maxResults">Máximo de Ofertas por Envio</label>
+          <input type="number" id="maxResults" value="10">
+        </div>
+
+        <div class="field">
+          <label for="cronSchedule">Frequência de Envio</label>
+          <select id="cronSchedule">
+            <option value="0 */1 * * *">A cada 1 hora</option>
+            <option value="0 */2 * * *">A cada 2 horas</option>
+            <option value="0 */3 * * *" selected>A cada 3 horas (Padrão)</option>
+            <option value="0 9,13,18 * * *">3x ao dia (09h, 13h e 18h)</option>
+            <option value="*/15 * * * *">A cada 15 minutos (Teste Rápido)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD 3: GALERIA DE OFERTAS ENVIADAS -->
+    <div class="card">
+      <div class="card-title">
+        <span>📸 Histórico Recente de Ofertas Enviadas</span>
+        <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" id="btnRefreshHistory">🔄 Atualizar Galeria</button>
+      </div>
+
+      <div class="offers-grid" id="offersGrid">
+        <!-- Cards de ofertas inseridos via JS -->
+      </div>
+    </div>
+
+    <!-- CARD 4: CONSOLE DE ATIVIDADE -->
+    <div class="card">
+      <div class="card-title">
+        📟 Console de Status
+      </div>
+      <div class="console-box" id="consoleBox">
+        <div class="log-line">⚡ Painel carregado com catálogo completo do Mercado Livre.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // CATÁLOGO COMPLETO DAS CATEGORIAS & SUBCATEGORIAS/MARCAS MERCADO LIVRE
+    const CASCADE_DATA = [
+      {
+        id: 'celulares',
+        name: 'Celulares & Telefones',
+        icon: '📱',
+        subs: [
+          { id: 'iphone', name: 'Apple / iPhone (iPhone 16, 15, 14, 13)' },
+          { id: 'samsung galaxy', name: 'Samsung Galaxy (Linha S, Z, A, M)' },
+          { id: 'xiaomi', name: 'Xiaomi / Redmi / Poco' },
+          { id: 'motorola', name: 'Motorola Moto (Edge, G, Razr)' },
+          { id: 'realme', name: 'Realme & Asus ROG' },
+          { id: 'smartwatch', name: 'Smartwatches & Relógios Inteligentes' },
+          { id: 'airpods', name: 'Fones TWS (AirPods, Galaxy Buds, Redmi)' },
+          { id: 'carregador celular', name: 'Carregadores, Cabos & Powerbanks' },
+          { id: 'capinha celular', name: 'Capinhas, Películas & Suportes' },
+        ]
+      },
+      {
+        id: 'informatica',
+        name: 'Informática & Computação',
+        icon: '💻',
+        subs: [
+          { id: 'notebook gamer', name: 'Notebooks Gamer & MacBooks' },
+          { id: 'pc gamer', name: 'Computadores Gamer & PCs Montados' },
+          { id: 'monitor gamer', name: 'Monitores Gamer, 4K & UltraWide' },
+          { id: 'placa de video', name: 'Placas de Vídeo (RTX 4060/4070/4080)' },
+          { id: 'processador intel ryzen', name: 'Processadores & Placas-Mãe (Intel / Ryzen)' },
+          { id: 'ssd nvme', name: 'Armazenamento, SSDs & HDs Externos' },
+          { id: 'teclado mecanico', name: 'Teclados Mecânicos & Mouses Gamer' },
+          { id: 'impressora', name: 'Impressoras & Filamentos 3D' },
+          { id: 'roteador wifi', name: 'Roteadores Mesh & Wi-Fi 6' },
+        ]
+      },
+      {
+        id: 'games',
+        name: 'Games & Consoles',
+        icon: '🎮',
+        subs: [
+          { id: 'playstation 5', name: 'PlayStation 5, Controles & Jogos' },
+          { id: 'xbox series', name: 'Xbox Series X/S & Jogos' },
+          { id: 'nintendo switch', name: 'Nintendo Switch & Jogos' },
+          { id: 'steam deck', name: 'Consoles Portáteis PC (Steam Deck, ROG Ally)' },
+          { id: 'cadeira gamer', name: 'Cadeiras Gamer & Mesas Ergonomicas' },
+          { id: 'volante logitech', name: 'Volantes, Joysticks & Cockpits' },
+        ]
+      },
+      {
+        id: 'eletronicos-audio-video',
+        name: 'Eletrônicos, Áudio e Som',
+        icon: '🎧',
+        subs: [
+          { id: 'smart tv', name: 'Smart TVs 4K, OLED & QLED (50"/55"/65")' },
+          { id: 'caixa de som jbl', name: 'Caixas de Som Bluetooth & JBL' },
+          { id: 'fone bluetooth', name: 'Fones de Ouvido Noise Cancelling' },
+          { id: 'soundbar', name: 'Soundbars & Home Theater 5.1' },
+          { id: 'drone dji', name: 'Drones & Câmeras (DJI, GoPro, Canon)' },
+          { id: 'camera de seguranca', name: 'Segurança (Fechaduras & Câmeras 360)' },
+          { id: 'fire tv stick', name: 'Streaming (Fire TV, Chromecast, Roku)' },
+        ]
+      },
+      {
+        id: 'eletrodomesticos',
+        name: 'Eletrodomésticos & Linha Branca',
+        icon: '🔌',
+        subs: [
+          { id: 'air fryer', name: 'Air Fryers & Fritadeiras Oven' },
+          { id: 'cafeteira', name: 'Cafeteiras Elétricas & Expresso' },
+          { id: 'aspirador robo', name: 'Aspiradores Robô & Verticais' },
+          { id: 'geladeira', name: 'Geladeiras Frost Free & Inverter' },
+          { id: 'lava e seca', name: 'Lava e Seca & Máquinas de Lavar' },
+          { id: 'cooktop', name: 'Cooktops, Fogões & Fornos de Embutir' },
+          { id: 'ar condicionado', name: 'Ar-Condicionado Split Inverter & Clima' },
+          { id: 'liquidificador', name: 'Liquidificadores & Batedeiras Planetárias' },
+        ]
+      },
+      {
+        id: 'casa-moveis-decoracao',
+        name: 'Casa, Móveis & Decoração',
+        icon: '🏠',
+        subs: [
+          { id: 'sofa retratil', name: 'Sofás Retráteis & Poltronas Reclináveis' },
+          { id: 'colchao queen king', name: 'Colchões Emma/Castor & Camas Box' },
+          { id: 'guarda roupa', name: 'Guarda-Roupas & Racks para TV' },
+          { id: 'mesa de jantar', name: 'Mesas de Jantar & Cadeiras' },
+          { id: 'lampada smart', name: 'Iluminação & Lâmpadas Inteligentes' },
+          { id: 'jogo de cama', name: 'Decoração, Jogo de Cama & Cortinas' },
+        ]
+      },
+      {
+        id: 'ferramentas',
+        name: 'Ferramentas & Construção',
+        icon: '🛠️',
+        subs: [
+          { id: 'parafusadeira', name: 'Parafusadeiras & Furadeiras a Bateria' },
+          { id: 'jogo de ferramentas', name: 'Kits & Maletas de Ferramentas' },
+          { id: 'serra tico tico', name: 'Serras, Lixadeiras & Esmerilhadeiras' },
+          { id: 'inversora de solda', name: 'Inversoras de Solda & Lavadoras WAP' },
+          { id: 'chuveiro lorenzetti', name: 'Chuveiros Eletrônicos & Torneiras Gourmet' },
+        ]
+      },
+      {
+        id: 'beleza-e-cuidado-pessoal',
+        name: 'Beleza & Cuidado Pessoal',
+        icon: '💄',
+        subs: [
+          { id: 'barbeador eletrico', name: 'Barbeadores & Maquininhas de Cabelo' },
+          { id: 'secador de cabelo', name: 'Secadores, Escovas & Chapinhas' },
+          { id: 'perfume importado', name: 'Perfumes Importados (Carolina Herrera, Sauvage)' },
+          { id: 'skincare', name: 'Skincare, Sérum & Protetor Solar' },
+          { id: 'maquiagem', name: 'Maquiagem & Kites de Cosméticos' },
+        ]
+      },
+      {
+        id: 'suplementos',
+        name: 'Saúde, Suplementos & Nutrição',
+        icon: '💊',
+        subs: [
+          { id: 'whey protein', name: 'Whey Protein (Growth, Max, Dux)' },
+          { id: 'creatina', name: 'Creatina Monohidratada 300g/500g' },
+          { id: 'pre treino', name: 'Pré-Treinos & Termogênicos' },
+          { id: 'vitamina c d3', name: 'Vitaminas, Ômega 3 & Minerais' },
+        ]
+      },
+      {
+        id: 'esportes-fitness',
+        name: 'Esportes & Fitness',
+        icon: '⚽',
+        subs: [
+          { id: 'bicicleta aro 29', name: 'Bicicletas Aro 29 & Mountain Bikes' },
+          { id: 'kit halteres', name: 'Halteres, Anilhas & Equipamentos' },
+          { id: 'tenis corrida', name: 'Tênis de Corrida (Nike, Adidas, Asics)' },
+          { id: 'barraca camping', name: 'Camping, Colchões & Outdoor' },
+          { id: 'bola futebol', name: 'Futebol, Camisas de Time & Luvas' },
+        ]
+      },
+      {
+        id: 'moda',
+        name: 'Moda, Calçados & Acessórios',
+        icon: '👕',
+        subs: [
+          { id: 'tenis casual', name: 'Tênis Streetwear (Air Force, All Star)' },
+          { id: 'camiseta masculina', name: 'Roupas Masculinas & Jaquetas' },
+          { id: 'vestido feminino', name: 'Moda Feminina & Conjuntos' },
+          { id: 'mochila notebook', name: 'Mochilas Executivas & Impermeáveis' },
+          { id: 'relogio casio', name: 'Óculos de Sol & Relógios' },
+        ]
+      },
+      {
+        id: 'brinquedos-e-hobbies',
+        name: 'Bebês, Brinquedos & Infantil',
+        icon: '👶',
+        subs: [
+          { id: 'carrinho de bebe', name: 'Carrinhos de Bebê & Cadeirinhas para Auto' },
+          { id: 'brinquedo fisher price', name: 'Brinquedos Educativos & Pelúcias' },
+          { id: 'lego', name: 'Lego (Star Wars, Technic, City)' },
+          { id: 'mamadeira avent', name: 'Amamentação, Extratores & Mamadeiras' },
+        ]
+      },
+      {
+        id: 'acessorios-para-veiculos',
+        name: 'Automotivo & Acessórios',
+        icon: '🚗',
+        subs: [
+          { id: 'pneu aro', name: 'Pneus (Michelin, Pirelli, Goodyear)' },
+          { id: 'multimidia android', name: 'Central Multimídia & Som Automotivo' },
+          { id: 'oleo motor 5w30', name: 'Óleos de Motor & Fluidos' },
+          { id: 'estetica automotiva', name: 'Ceras & Estética Automotiva' },
+        ]
+      },
+      {
+        id: 'petshop',
+        name: 'Pet Shop & Animais',
+        icon: '🐶',
+        subs: [
+          { id: 'racao caes', name: 'Rações para Cães (Royal Canin, Premier, Golden)' },
+          { id: 'racao gatos', name: 'Rações & Areia para Gatos' },
+          { id: 'caminha pet', name: 'Camas, Arranhadores & Acessórios Pet' },
+        ]
+      }
+    ];
+
+    let selectedCategories = [];
+    let isRunning = false;
+
+    // DOM
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const btnToggleBot = document.getElementById('btnToggleBot');
+    const btnRunNow = document.getElementById('btnRunNow');
+    const cascadeTree = document.getElementById('cascadeTree');
+    const selectionSummary = document.getElementById('selectionSummary');
+    const inputTreeSearch = document.getElementById('inputTreeSearch');
+    const btnExpandAll = document.getElementById('btnExpandAll');
+    const btnUnselectAll = document.getElementById('btnUnselectAll');
+    const inputCustomCategory = document.getElementById('inputCustomCategory');
+    const btnAddCustom = document.getElementById('btnAddCustom');
+    const btnSaveConfig = document.getElementById('btnSaveConfig');
+    const btnRefreshHistory = document.getElementById('btnRefreshHistory');
+    const offersGrid = document.getElementById('offersGrid');
+    const consoleBox = document.getElementById('consoleBox');
+
+    function log(msg) {
+      const time = new Date().toLocaleTimeString('pt-BR');
+      const div = document.createElement('div');
+      div.className = 'log-line';
+      div.textContent = `[${time}] ${msg}`;
+      consoleBox.appendChild(div);
+      consoleBox.scrollTop = consoleBox.scrollHeight;
+    }
+
+    // Renderiza a Árvore Completa
+    function renderCascadeTree(filterText = '') {
+      cascadeTree.innerHTML = '';
+      const filterLower = filterText.toLowerCase().trim();
+
+      CASCADE_DATA.forEach(cat => {
+        const matchingSubs = cat.subs.filter(s => 
+          !filterLower || 
+          cat.name.toLowerCase().includes(filterLower) || 
+          s.name.toLowerCase().includes(filterLower) || 
+          s.id.toLowerCase().includes(filterLower)
+        );
+
+        if (filterLower && matchingSubs.length === 0) return;
+
+        const subIds = cat.subs.map(s => s.id);
+        const selectedSubCount = subIds.filter(id => selectedCategories.includes(id)).length;
+        const isParentSelected = selectedSubCount > 0 && selectedSubCount === subIds.length;
+
+        const parentDiv = document.createElement('div');
+        parentDiv.className = `parent-node ${filterLower ? 'open' : ''}`;
+
+        // Header
+        const header = document.createElement('div');
+        header.className = 'parent-header';
+        header.innerHTML = `
+          <div class="parent-left">
+            <span class="parent-toggle-icon">▶</span>
+            <input type="checkbox" ${isParentSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleParentGroup('${cat.id}', this.checked)">
+            <span>${cat.icon} ${cat.name}</span>
+          </div>
+          <span class="badge-count">${selectedSubCount}/${cat.subs.length} selecionadas</span>
+        `;
+
+        header.addEventListener('click', () => {
+          parentDiv.classList.toggle('open');
+        });
+
+        // Sublist
+        const subList = document.createElement('div');
+        subList.className = 'subcategories-list';
+
+        matchingSubs.forEach(sub => {
+          const isSubChecked = selectedCategories.includes(sub.id);
+          const subLabel = document.createElement('label');
+          subLabel.className = 'sub-item';
+          subLabel.innerHTML = `
+            <input type="checkbox" value="${sub.id}" ${isSubChecked ? 'checked' : ''} onchange="toggleSingleCategory('${sub.id}', this.checked)">
+            <span>${sub.name}</span>
+          `;
+          subList.appendChild(subLabel);
+        });
+
+        parentDiv.appendChild(header);
+        parentDiv.appendChild(subList);
+        cascadeTree.appendChild(parentDiv);
+      });
+
+      renderSummaryChips();
+    }
+
+    function renderSummaryChips() {
+      selectionSummary.innerHTML = '';
+
+      if (selectedCategories.length === 0) {
+        selectionSummary.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">Nenhuma subcategoria selecionada. (Selecione acima para filtrar com precisão)</span>';
+        return;
+      }
+
+      selectedCategories.forEach(catId => {
+        let displayName = catId;
+        CASCADE_DATA.forEach(parent => {
+          if (parent.id === catId) displayName = `${parent.icon} ${parent.name}`;
+          parent.subs.forEach(s => {
+            if (s.id === catId) displayName = `${parent.icon} ${s.name}`;
+          });
+        });
+
+        const chip = document.createElement('div');
+        chip.className = 'active-chip';
+        chip.innerHTML = `${displayName} <span class="active-chip-remove" onclick="removeSingleCategory('${catId}')">&times;</span>`;
+        selectionSummary.appendChild(chip);
+      });
+    }
+
+    function toggleParentGroup(parentId, isChecked) {
+      const parent = CASCADE_DATA.find(p => p.id === parentId);
+      if (!parent) return;
+
+      const subIds = parent.subs.map(s => s.id);
+      if (isChecked) {
+        subIds.forEach(id => {
+          if (!selectedCategories.includes(id)) selectedCategories.push(id);
+        });
+      } else {
+        selectedCategories = selectedCategories.filter(id => !subIds.includes(id));
+      }
+
+      renderCascadeTree(inputTreeSearch.value);
+      saveConfigToServer();
+    }
+
+    function toggleSingleCategory(catId, isChecked) {
+      if (isChecked) {
+        if (!selectedCategories.includes(catId)) selectedCategories.push(catId);
+      } else {
+        selectedCategories = selectedCategories.filter(id => id !== catId);
+      }
+      renderCascadeTree(inputTreeSearch.value);
+      saveConfigToServer();
+    }
+
+    function removeSingleCategory(catId) {
+      selectedCategories = selectedCategories.filter(id => id !== catId);
+      renderCascadeTree(inputTreeSearch.value);
+      saveConfigToServer();
+    }
+
+    inputTreeSearch.addEventListener('input', (e) => {
+      renderCascadeTree(e.target.value);
+    });
+
+    btnExpandAll.addEventListener('click', () => {
+      document.querySelectorAll('.parent-node').forEach(node => node.classList.add('open'));
+    });
+
+    btnUnselectAll.addEventListener('click', () => {
+      selectedCategories = [];
+      renderCascadeTree(inputTreeSearch.value);
+      saveConfigToServer();
+      log('🔲 Todas as subcategorias foram desmarcadas.');
+    });
+
+    btnAddCustom.addEventListener('click', () => {
+      const val = inputCustomCategory.value.trim().toLowerCase();
+      if (!val) return;
+      if (!selectedCategories.includes(val)) {
+        selectedCategories.push(val);
+        renderCascadeTree(inputTreeSearch.value);
+        saveConfigToServer();
+        log(`➕ Subnicho customizado "${val}" adicionado.`);
+      }
+      inputCustomCategory.value = '';
+    });
+
+    // API Config
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+
+        selectedCategories = data.categories || [];
+        renderCascadeTree();
+
+        document.getElementById('minPrice').value = data.minPrice ?? 30;
+        document.getElementById('maxPrice').value = data.maxPrice ?? 500;
+        document.getElementById('minDiscount').value = data.minDiscount ?? 10;
+        document.getElementById('maxResults').value = data.maxResults ?? 10;
+
+        if (data.cronSchedule) {
+          document.getElementById('cronSchedule').value = data.cronSchedule;
+        }
+
+        updateStatus(data.isRunning);
+        log(`Configurações carregadas. ${selectedCategories.length} subcategorias selecionadas.`);
+      } catch (err) {
+        log('Erro ao carregar configurações: ' + err.message);
+      }
+    }
+
+    function updateStatus(running) {
+      isRunning = running;
+      if (isRunning) {
+        statusDot.className = 'status-dot active';
+        statusText.textContent = 'Automação Ativa (24/7)';
+        btnToggleBot.textContent = '⏹️ Pausar Automação';
+        btnToggleBot.className = 'btn btn-secondary';
+      } else {
+        statusDot.className = 'status-dot';
+        statusText.textContent = 'Automação Pausada';
+        btnToggleBot.textContent = '▶️ Iniciar Automação';
+        btnToggleBot.className = 'btn btn-primary';
+      }
+    }
+
+    async function saveConfigToServer() {
+      const payload = {
+        categories: selectedCategories,
+        minPrice: Number(document.getElementById('minPrice').value),
+        maxPrice: Number(document.getElementById('maxPrice').value),
+        minDiscount: Number(document.getElementById('minDiscount').value),
+        maxResults: Number(document.getElementById('maxResults').value),
+        cronSchedule: document.getElementById('cronSchedule').value,
+      };
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          log(`✅ Configurações salvas: ${selectedCategories.length} subcategorias ativas.`);
+        }
+      } catch (err) {
+        log('❌ Erro ao salvar configurações: ' + err.message);
+      }
+    }
+
+    // Histórico de Ofertas
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/history');
+        const items = await res.json();
+
+        offersGrid.innerHTML = '';
+        if (!items || items.length === 0) {
+          offersGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; grid-column: 1/-1;">Nenhuma oferta enviada ainda. As ofertas enviadas no WhatsApp aparecerão aqui!</div>';
+          return;
+        }
+
+        items.slice(0, 12).forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'offer-card';
+          card.innerHTML = `
+            <div class="offer-img-wrapper">
+              <img class="offer-img" src="${item.thumbnail || 'https://via.placeholder.com/200?text=Sem+Foto'}" alt="${item.title}">
+              <div class="discount-badge">${item.discountPercent || 0}% OFF</div>
+            </div>
+            <div class="offer-body">
+              <div class="offer-title">${item.title}</div>
+              <div class="offer-prices">
+                <span class="price-current">R$ ${item.currentPrice || item.price || 0}</span>
+                ${item.originalPrice ? `<span class="price-old">R$ ${item.originalPrice}</span>` : ''}
+              </div>
+              <div class="offer-footer">
+                <span class="seller-tag">${item.seller || 'Qualificado'}</span>
+                <a href="${item.permalink || '#'}" target="_blank" style="color: var(--accent-blue); text-decoration: none;">Ver Link &rarr;</a>
+              </div>
+            </div>
+          `;
+          offersGrid.appendChild(card);
+        });
+        log(`📸 Histórico atualizado com ${items.length} ofertas enviadas.`);
+      } catch (err) {
+        log('Erro ao carregar histórico: ' + err.message);
+      }
+    }
+
+    // Listeners
+    btnSaveConfig.addEventListener('click', saveConfigToServer);
+    btnRefreshHistory.addEventListener('click', loadHistory);
+
+    btnToggleBot.addEventListener('click', async () => {
+      const endpoint = isRunning ? '/api/bot/stop' : '/api/bot/start';
+      log(isRunning ? 'Solicitando parada da automação...' : 'Iniciando automação 24/7...');
+      try {
+        const res = await fetch(endpoint, { method: 'POST' });
+        const data = await res.json();
+        updateStatus(data.isRunning);
+        log(data.message);
+      } catch (err) {
+        log('Erro ao alterar status da automação: ' + err.message);
+      }
+    });
+
+    btnRunNow.addEventListener('click', async () => {
+      log('⚡ Executando ciclo de busca e envio imediato no WhatsApp...');
+      btnRunNow.disabled = true;
+      btnRunNow.textContent = '⏳ Buscando...';
+      try {
+        const res = await fetch('/api/bot/run-now', { method: 'POST' });
+        const data = await res.json();
+        log(data.message);
+        loadHistory();
+      } catch (err) {
+        log('Erro na execução imediata: ' + err.message);
+      } finally {
+        btnRunNow.disabled = false;
+        btnRunNow.textContent = '⚡ Enviar Ofertas Agora';
+      }
+    });
+
+    // Init
+    loadConfig();
+    loadHistory();
+  </script>
+</body>
+</html>

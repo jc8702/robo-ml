@@ -1,0 +1,15 @@
+node_modules/
+dist/
+output/
+.env
+.chrome-profile/
+.wa-auth/
+.fb-profile/
+.fb-temp-images/
+.sent-history.json
+.price-history.json
+test-*.mts
+test-*.ts
+test-*.html
+test-*.jpg
+*.log

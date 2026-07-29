@@ -1,0 +1,44 @@
+{
+  "name": "ml-ofertas-bot",
+  "version": "1.0.0",
+  "description": "Bot local para coletar ofertas do Mercado Livre e gerar mensagens com links de afiliado para WhatsApp",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "ofertas": "npm run build && node dist/index.js",
+    "ofertas:query": "npm run build && node dist/index.js --query",
+    "auto": "npm run build && node dist/index.js --auto",
+    "gui": "npm run build && node dist/server.js",
+    "list-groups": "npm run build && node dist/list-groups.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "keywords": [
+    "mercado-livre",
+    "afiliados",
+    "whatsapp",
+    "ofertas"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/node-cron": "^3.0.11",
+    "@types/pg": "^8.20.0",
+    "@types/qrcode-terminal": "^0.12.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "chalk": "^5.3.0",
+    "clipboardy": "^4.0.0",
+    "dotenv": "^16.4.0",
+    "node-cron": "^4.6.0",
+    "pg": "^8.22.0",
+    "playwright-core": "^1.62.0",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

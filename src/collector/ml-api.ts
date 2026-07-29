@@ -1,0 +1,419 @@
+import { chromium, type BrowserContext, type Page } from 'playwright-core';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { existsSync, readdirSync, mkdirSync } from 'node:fs';
+import type { AppConfig } from '../config/settings.js';
+import { loadSentHistory, normalizeTitleKey, isLowestPriceIn30Days } from './history.js';
+
+/** Representa uma oferta coletada do Mercado Livre */
+export interface MLOffer {
+  id: string;
+  title: string;
+  permalink: string;
+  thumbnail: string;
+  originalPrice: number;
+  currentPrice: number;
+  discountPercent: number;
+  freeShipping: boolean;
+  seller: string;
+  condition: 'new' | 'used';
+  soldQuantity: number;
+  isLowest30Days?: boolean;
+}
+
+const BROWSER_PROFILE_DIR = join(process.cwd(), '.chrome-profile');
+
+/**
+ * Encontra o Chrome/Chromium no sistema.
+ */
+function findBrowserPath(): string {
+  const homeDir = homedir();
+
+  const candidates: string[] = [];
+
+  // Playwright Chromium
+  const pwDir = join(homeDir, 'AppData', 'Local', 'ms-playwright');
+  if (existsSync(pwDir)) {
+    const dirs = readdirSync(pwDir)
+      .filter((d: string) => d.startsWith('chromium') && !d.includes('headless'))
+      .sort();
+    for (const dir of dirs.reverse()) {
+      candidates.push(join(pwDir, dir, 'chrome-win', 'chrome.exe'));
+    }
+  }
+
+  // Chrome do sistema
+  candidates.push(
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    join(homeDir, 'AppData', 'Local', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+  );
+
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+
+  throw new Error('Chrome/Chromium não encontrado. Instale Chrome ou execute: npx playwright install chromium');
+}
+
+/**
+ * Abre browser com perfil persistente.
+ * A primeira execução fica VISÍVEL para o usuário fazer login/verificação.
+ * As execuções seguintes reutilizam o perfil.
+ */
+async function openBrowser(): Promise<BrowserContext> {
+  const executablePath = findBrowserPath();
+
+  if (!existsSync(BROWSER_PROFILE_DIR)) {
+    mkdirSync(BROWSER_PROFILE_DIR, { recursive: true });
+  }
+
+  // launchPersistentContext mantém TUDO: cookies, localStorage, sessions
+  // MVP: sempre visível — o ML detecta headless com muita agressividade
+  const context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, {
+    headless: false,
+    executablePath,
+    locale: 'pt-BR',
+    viewport: { width: 1366, height: 768 },
+    args: [
+      '--no-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-infobars',
+      '--disable-dev-shm-usage',
+    ],
+    ignoreDefaultArgs: ['--enable-automation'],
+  });
+
+  // Stealth: esconde sinais de automação
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    delete (navigator as any).__proto__.webdriver;
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => [1, 2, 3, 4, 5],
+    });
+    Object.defineProperty(navigator, 'languages', {
+      get: () => ['pt-BR', 'pt', 'en-US', 'en'],
+    });
+    (window as any).chrome = {
+      runtime: {},
+      loadTimes: () => {},
+      csi: () => {},
+      app: {},
+    };
+  });
+
+  return context;
+}
+
+/**
+ * Verifica se a página carregou resultados de busca.
+ */
+async function hasSearchResults(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const selectors = [
+      '.ui-search-layout__item',
+      '.ui-search-result__wrapper',
+      '[class*="poly-card"]',
+      '.ui-search-results',
+      'ol.ui-search-layout',
+    ];
+    return selectors.some(s => document.querySelectorAll(s).length > 0);
+  });
+}
+
+/**
+ * Extrai ofertas da página de busca do ML com validação de vendedor qualificado.
+ */
+async function extractOffers(page: Page): Promise<MLOffer[]> {
+  return page.evaluate(() => {
+    const results: any[] = [];
+
+    // Tenta vários seletores (ML muda frequentemente)
+    let items = document.querySelectorAll('.ui-search-layout__item');
+    if (items.length === 0) items = document.querySelectorAll('[class*="poly-card"]');
+    if (items.length === 0) items = document.querySelectorAll('.ui-search-result__wrapper');
+    if (items.length === 0) items = document.querySelectorAll('li.ui-search-layout__item');
+
+    items.forEach((item, i) => {
+      try {
+        // Link limpo
+        const link = item.querySelector('a[href*="mercadolivre.com.br"]') as HTMLAnchorElement;
+        if (!link) return;
+        let rawHref = link.href.split('#')[0].split('?')[0];
+
+        // Extrai o ID do produto para criar o permalink curto limpo
+        const pMatch = rawHref.match(/\/p\/(MLB\d+)/i);
+        const mlbMatch = rawHref.match(/(MLB-?\d+)/i);
+
+        let permalink = rawHref;
+        if (pMatch && pMatch[1]) {
+          permalink = `https://www.mercadolivre.com.br/p/${pMatch[1]}`;
+        } else if (mlbMatch && mlbMatch[1]) {
+          permalink = `https://produto.mercadolivre.com.br/${mlbMatch[1]}`;
+        }
+
+        // Título
+        const titleEl = item.querySelector('h2, h3, [class*="title"], .poly-component__title');
+        const title = titleEl?.textContent?.trim() || '';
+        if (!title || title.length < 5) return;
+
+        // Vendedor & Qualificação (Loja Oficial, MercadoLíder, Full ou Vendedor Registrado)
+        const itemText = item.textContent || '';
+        const itemTextLower = itemText.toLowerCase();
+        const isOfficial = item.querySelector('.ui-search-official-store-label, [class*="official"]') !== null || itemTextLower.includes('loja oficial');
+        const isLeader = itemTextLower.includes('mercadolíder') || itemTextLower.includes('mercadolider');
+        const isFull = itemText.includes('FULL');
+        const sellerEl = item.querySelector('.poly-component__seller, .ui-search-official-store-label, [class*="seller"]');
+        const sellerName = sellerEl?.textContent?.trim() || (isOfficial ? 'Loja Oficial' : (isLeader ? 'MercadoLíder' : ''));
+
+        // Filtro de Vendedor Qualificado: descarta anúncios sem credencial confiável
+        const isQualified = isOfficial || isLeader || isFull || sellerName.length > 0;
+        if (!isQualified) return;
+
+        // Imagem (alta resolução)
+        const img = item.querySelector('img[src*="http"], img[data-src*="http"]') as HTMLImageElement | null;
+        let thumbnail = img?.src || img?.getAttribute('data-src') || '';
+        if (thumbnail) {
+          thumbnail = thumbnail.replace(/-I\.jpg/g, '-O.jpg').replace(/-V\.jpg/g, '-O.jpg');
+        }
+
+        // Preços
+        const priceParts = item.querySelectorAll('.andes-money-amount__fraction');
+        let currentPrice = 0;
+        let originalPrice = 0;
+
+        if (priceParts.length >= 2) {
+          const first = priceParts[0];
+          const second = priceParts[1];
+          const firstIsOld = first.closest('s, del, [class*="previous"]') !== null;
+
+          if (firstIsOld) {
+            originalPrice = parseFloat(first.textContent?.replace(/\./g, '') || '0');
+            currentPrice = parseFloat(second.textContent?.replace(/\./g, '') || '0');
+          } else {
+            currentPrice = parseFloat(first.textContent?.replace(/\./g, '') || '0');
+            originalPrice = currentPrice;
+          }
+        } else if (priceParts.length === 1) {
+          currentPrice = parseFloat(priceParts[0].textContent?.replace(/\./g, '') || '0');
+          originalPrice = currentPrice;
+        }
+
+        if (currentPrice <= 0) return;
+
+        const discountPercent = originalPrice > currentPrice
+          ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100)
+          : 0;
+
+        const freeShipping = itemTextLower.includes('frete grátis');
+
+        // Detecção do selo oficial de Menor Preço dos últimos 30 dias do Mercado Livre
+        const isLowest30Days = itemTextLower.includes('menor preço') ||
+                               itemTextLower.includes('menor preco') ||
+                               itemTextLower.includes('últimos 30 dias') ||
+                               itemTextLower.includes('ultimos 30 dias') ||
+                               itemTextLower.includes('melhor preço');
+
+        results.push({
+          id: `ml-${i}`,
+          title,
+          permalink,
+          thumbnail,
+          originalPrice: originalPrice || currentPrice,
+          currentPrice,
+          discountPercent,
+          freeShipping,
+          seller: sellerName || 'Vendedor Qualificado',
+          condition: 'new',
+          soldQuantity: 0,
+          isLowest30Days,
+        });
+      } catch { /* skip */ }
+    });
+
+    return results;
+  });
+}
+
+/**
+ * Busca ofertas no Mercado Livre.
+ */
+export async function searchOffers(
+  query: string,
+  config: AppConfig
+): Promise<MLOffer[]> {
+  // Detecta se é a primeira execução (sem perfil de browser)
+  const hasProfile = existsSync(join(BROWSER_PROFILE_DIR, 'Default'))
+    || existsSync(join(BROWSER_PROFILE_DIR, 'Local State'));
+  const isFirstRun = !hasProfile;
+
+  if (isFirstRun) {
+    console.log('');
+    console.log('  ╔═══════════════════════════════════════════════════╗');
+    console.log('  ║  🆕 PRIMEIRA EXECUÇÃO                             ║');
+    console.log('  ║                                                   ║');
+    console.log('  ║  Um browser vai abrir. Se aparecer verificação:   ║');
+    console.log('  ║  1. Clique em "Já tenho conta"                    ║');
+    console.log('  ║  2. Faça login na sua conta do ML                 ║');
+    console.log('  ║  3. A busca de produtos vai carregar sozinha      ║');
+    console.log('  ║                                                   ║');
+    console.log('  ║  ⏱️  Você tem 3 minutos para completar.            ║');
+    console.log('  ║  Nas próximas vezes, será automático.             ║');
+    console.log('  ╚═══════════════════════════════════════════════════╝');
+    console.log('');
+  }
+
+  let context: BrowserContext | null = null;
+
+  try {
+    context = await openBrowser();
+    const page = context.pages()[0] || await context.newPage();
+
+    // Constrói URL
+    const searchQuery = query.replace(/\s+/g, '-');
+    const url = `https://lista.mercadolivre.com.br/${encodeURIComponent(searchQuery)}`;
+
+    console.log(`  📡 Acessando: ${url}`);
+
+    // Navega e espera a rede estabilizar (captura redirecionamentos)
+    try {
+      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+    } catch {
+      // Timeout de rede é aceitável — a página pode ter carregado parcialmente
+      await page.waitForTimeout(3000);
+    }
+
+    // Espera extra para JS do ML renderizar
+    await page.waitForTimeout(3000);
+
+    // Verifica se tem resultados (com retry em caso de navegação tardia)
+    let hasResults = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        hasResults = await hasSearchResults(page);
+        break;
+      } catch {
+        // Contexto destruído por navegação — espera e tenta de novo
+        await page.waitForTimeout(2000);
+      }
+    }
+
+    if (!hasResults) {
+      console.log('  🔐 Verificação/login necessário! Complete no browser aberto...');
+      try {
+        // Monitora navegação de volta para a página de resultados
+        await page.waitForURL('**/lista.mercadolivre.com.br/**', { timeout: 180000 })
+          .catch(() => {});
+        // Espera os resultados carregarem
+        await page.waitForSelector(
+          '.ui-search-layout__item, [class*="poly-card"], .ui-search-results, ol.ui-search-layout',
+          { timeout: 30000 }
+        );
+        hasResults = true;
+        console.log('  ✅ Resultados carregados!');
+      } catch {
+        console.log('  ⏰ Tempo esgotado. Tente novamente.');
+      }
+    }
+
+    if (hasResults) {
+      // Scroll para carregar mais
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 3));
+      await page.waitForTimeout(1000);
+
+      const offers = await extractOffers(page);
+
+      // Filtro de Relevância Estrita de Título:
+      // Se for busca por marca/produto específico (ex: "iphone"), o título DEVE conter pelo menos uma das palavras-chave da busca.
+      const queryLower = query.toLowerCase().trim();
+      const isGenericQuery = ['ofertas do dia', 'mais vendidos', 'promoção', 'desconto', 'oferta'].includes(queryLower);
+
+      const queryKeywords = queryLower
+        .replace(/[^a-z0-9\s]/g, '')
+        .split(/\s+/)
+        .filter((w) => w.length >= 3);
+
+      const relevantOffers = offers.filter((offer) => {
+        if (isGenericQuery) return true;
+        const titleLower = offer.title.toLowerCase();
+        // Exige que ao menos uma palavra-chave principal da busca esteja no título do produto
+        return queryKeywords.some((keyword) => titleLower.includes(keyword));
+      });
+
+      console.log(`  📦 ${offers.length} no ML ➔ ${relevantOffers.length} filtrados com precisão para "${query}"`);
+
+      await context.close();
+      return relevantOffers;
+    }
+
+    await context.close();
+    return [];
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`  ❌ Erro: ${msg}`);
+    if (context) await context.close().catch(() => {});
+    return [];
+  }
+}
+/**
+ * Coleta ofertas de múltiplas queries com deduplicação, filtro de histórico e seleção do menor preço.
+ */
+export async function collectOffers(
+  queries: string[],
+  config: AppConfig
+): Promise<MLOffer[]> {
+  const allOffers: MLOffer[] = [];
+  const history = loadSentHistory();
+
+  console.log(`\n📚 Histórico carregado: ${history.size} registros de envios anteriores (produtos não serão repetidos).`);
+
+  for (const query of queries) {
+    console.log(`\n🔍 Buscando: "${query}"...`);
+    const offers = await searchOffers(query, config);
+
+    for (const offer of offers) {
+      const titleKey = normalizeTitleKey(offer.title);
+      // Evita repetição: pula se a URL ou título já foram enviados recentemente
+      if (history.has(offer.permalink) || history.has(titleKey)) {
+        continue;
+      }
+
+      // Validação do menor preço dos últimos 30 dias (via selo oficial do ML ou histórico local de preços)
+      offer.isLowest30Days = isLowestPriceIn30Days(titleKey, offer.currentPrice, offer.isLowest30Days);
+
+      allOffers.push(offer);
+    }
+
+    if (queries.indexOf(query) < queries.length - 1) {
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+
+  // Filtra pelas regras de preço e desconto
+  const filtered = allOffers
+    .filter((o) => o.currentPrice > 0)
+    .filter((o) => o.discountPercent >= config.filters.minDiscount)
+    .filter((o) => o.currentPrice >= config.filters.minPrice)
+    .filter((o) => config.filters.maxPrice === 0 || o.currentPrice <= config.filters.maxPrice);
+
+  // Agrupa produtos idênticos/similares e seleciona SOMENTE o de MENOR PREÇO
+  const lowestPriceMap = new Map<string, MLOffer>();
+  for (const offer of filtered) {
+    const key = normalizeTitleKey(offer.title);
+    if (!lowestPriceMap.has(key)) {
+      lowestPriceMap.set(key, offer);
+    } else {
+      const existing = lowestPriceMap.get(key)!;
+      if (offer.currentPrice < existing.currentPrice) {
+        lowestPriceMap.set(key, offer); // Substitui pela opção de menor preço
+      }
+    }
+  }
+
+  const uniqueOffers = Array.from(lowestPriceMap.values());
+
+  // Ordena pelo maior desconto e limita o resultado
+  return uniqueOffers
+    .sort((a, b) => b.discountPercent - a.discountPercent)
+    .slice(0, config.filters.maxResults);
+}
