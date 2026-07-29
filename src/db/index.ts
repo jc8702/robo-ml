@@ -7,7 +7,7 @@ let pool: pg.Pool | null = null;
  * Retorna a instância do pool do PostgreSQL se DATABASE_URL estiver configurada.
  */
 export function getDbPool(): pg.Pool | null {
-  const dbUrl = process.env.DATABASE_URL;
+  const dbUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_0SIXLDvOk3tl@ep-sparkling-silence-ac0kw825-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require';
   if (!dbUrl || !dbUrl.startsWith('postgres')) {
     return null;
   }

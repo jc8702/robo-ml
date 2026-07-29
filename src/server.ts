@@ -57,19 +57,34 @@ function updateEnvFile(updates: Record<string, string | number>): void {
 }
 
 /**
- * Servidor HTTP Principal
+ * Servidor HTTP Principal & Handler para Vercel Serverless
  */
-const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+export async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = req.url || '/';
   const method = req.method || 'GET';
 
   // Helper para JSON response
   const sendJson = (data: any, status = 200) => {
-    res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.writeHead(status, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
     res.end(JSON.stringify(data));
   };
 
-  // Static Files (HTML / CSS / JS)
+  if (method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
+    res.end();
+    return;
+  }
+
+  // Static Files (HTML / CSS / JS) - Apenas se não for endpoint de API
   if (method === 'GET' && !url.startsWith('/api/')) {
     let filePath = join(PUBLIC_DIR, url === '/' ? 'index.html' : url);
     if (!existsSync(filePath)) {
@@ -101,7 +116,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   // --- API ENDPOINTS ---
 
   // GET /api/config
-  if (method === 'GET' && url === '/api/config') {
+  if (method === 'GET' && (url === '/api/config' || url.endsWith('/config'))) {
     const config = await loadConfigAsync();
     return sendJson({
       categories: config.filters.categories,
@@ -124,7 +139,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   }
 
   // POST /api/config
-  if (method === 'POST' && url === '/api/config') {
+  if (method === 'POST' && (url === '/api/config' || url.endsWith('/config'))) {
     try {
       const body = await parseJsonBody(req);
       const updates: Record<string, string> = {};
@@ -157,21 +172,21 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   }
 
   // GET /api/history
-  if (method === 'GET' && url === '/api/history') {
+  if (method === 'GET' && (url === '/api/history' || url.endsWith('/history'))) {
     if (!existsSync(HISTORY_FILE)) {
       return sendJson([]);
     }
     try {
       const historyContent = readFileSync(HISTORY_FILE, 'utf-8');
       const items = JSON.parse(historyContent);
-      return sendJson(items.reverse()); // Mais recentes primeiro
+      return sendJson(items.reverse());
     } catch {
       return sendJson([]);
     }
   }
 
   // POST /api/bot/start
-  if (method === 'POST' && url === '/api/bot/start') {
+  if (method === 'POST' && (url === '/api/bot/start' || url.endsWith('/start'))) {
     if (!isBotRunning) {
       isBotRunning = true;
       const config = loadConfig();
@@ -181,13 +196,13 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   }
 
   // POST /api/bot/stop
-  if (method === 'POST' && url === '/api/bot/stop') {
+  if (method === 'POST' && (url === '/api/bot/stop' || url.endsWith('/stop'))) {
     isBotRunning = false;
     return sendJson({ isRunning: false, message: '⏹️ Automação pausada.' });
   }
 
   // POST /api/bot/run-now
-  if (method === 'POST' && url === '/api/bot/run-now') {
+  if (method === 'POST' && (url === '/api/bot/run-now' || url.endsWith('/run-now'))) {
     try {
       const config = loadConfig();
       runAutomaticCycle(config)
@@ -203,17 +218,25 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   // Fallback 404
   res.writeHead(404);
   res.end('Endpoint não encontrado.');
-});
+}
 
-// Inicia o servidor e abre o navegador
-server.listen(PORT, () => {
-  const url = `http://localhost:${PORT}`;
-  console.log('\n======================================================');
-  console.log(`🚀 Painel de Controle ML Ofertas Bot rodando em:`);
-  console.log(`👉 ${url}`);
-  console.log('======================================================\n');
+const server = createServer(handleRequest);
 
-  // Abre navegador padrão automaticamente no Windows
-  const openCmd = process.platform === 'win32' ? `start ${url}` : `open ${url}`;
-  exec(openCmd, () => {});
-});
+// Inicia o servidor localmente (apenas fora da Vercel)
+if (process.env.VERCEL !== '1') {
+  server.listen(PORT, () => {
+    const url = `http://localhost:${PORT}`;
+    console.log('\n======================================================');
+    console.log(`🚀 Painel de Controle ML Ofertas Bot rodando em:`);
+    console.log(`👉 ${url}`);
+    console.log('======================================================\n');
+
+    // Abre navegador padrão automaticamente no Windows se for execução local CLI
+    if (process.argv.includes('--open')) {
+      const openCmd = process.platform === 'win32' ? `start ${url}` : `open ${url}`;
+      exec(openCmd, () => {});
+    }
+  });
+}
+
+export default handleRequest;
