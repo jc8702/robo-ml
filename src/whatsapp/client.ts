@@ -49,6 +49,11 @@ async function saveWaAuthToDb() {
   if (!db || !existsSync(AUTH_DIR)) return;
   try {
     const files = readdirSync(AUTH_DIR);
+    if (files.length === 0) return;
+
+    // Remove registros antigos antes de inserir os atuais (evita acumulo)
+    await db.query("DELETE FROM app_settings WHERE key LIKE 'WA_AUTH_%'");
+
     for (const file of files) {
       const filePath = join(AUTH_DIR, file);
       const content = readFileSync(filePath, 'utf-8');
@@ -59,11 +64,12 @@ async function saveWaAuthToDb() {
         [key, content]
       );
     }
-    console.log('[DB] Sessao WhatsApp salva no Neon.');
+    console.log(`[DB] Sessao WhatsApp salva no Neon (${files.length} arquivo(s)).`);
   } catch (err) {
     console.error('[DB] Falha ao salvar sessao no Neon:', err);
   }
 }
+
 
 function printPairingCode(code: string) {
   console.log('\n╔══════════════════════════════════════════╗');
