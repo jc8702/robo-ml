@@ -1,0 +1,30 @@
+services:
+  - type: worker
+    name: robo-ml-worker
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_0SIXLDvOk3tl@ep-sparkling-silence-ac0kw825-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require
+      - key: ML_AFFILIATE_ID
+        value: "52075002"
+      - key: ML_AFFILIATE_WORD
+        value: promos-wa
+      - key: WHATSAPP_GROUP_ID
+        value: 120363428727908129@g.us
+      - key: FB_ENABLED
+        value: "true"
+      - key: FB_MAX_GROUPS_PER_CYCLE
+        value: "64"
+      - key: FB_DELAY_BETWEEN_POSTS
+        value: "60"
+      - key: FB_WA_GROUP_LINK
+        value: https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N
+      - key: AUTO_SCHEDULE_CRON
+        value: "0 */3 * * *"
+    disk:
+      name: bot-storage
+      mountPath: /app/.wa-auth
+      sizeGB: 1
