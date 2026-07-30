@@ -1,4 +1,4 @@
-import { chromium, type BrowserContext, type Page } from 'playwright-core';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { existsSync, readdirSync, mkdirSync } from 'node:fs';
@@ -78,29 +78,14 @@ function findBrowserPath(): string | undefined {
 }
 
 /**
- * Abre browser com perfil persistente e User-Agent oficial de Desktop Chrome.
+ * Cria uma instância limpa do browser + contexto com User-Agent oficial de Desktop Chrome.
  */
-async function openBrowser(): Promise<BrowserContext> {
+async function openBrowser(): Promise<{ browser: Browser; context: BrowserContext }> {
   const executablePath = findBrowserPath();
   const isCloud = !!process.env.RENDER || process.env.HEADLESS === 'true' || process.platform !== 'win32';
 
-  if (!existsSync(BROWSER_PROFILE_DIR)) {
-    mkdirSync(BROWSER_PROFILE_DIR, { recursive: true });
-  }
-
   const launchOptions: any = {
     headless: isCloud,
-    locale: 'pt-BR',
-    viewport: { width: 1366, height: 768 },
-    // CRÍTICO: User-Agent oficial de Chrome para evitar detecção Headless no Mercado Livre
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    extraHTTPHeaders: {
-      'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-      'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-      'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"Windows"',
-    },
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -116,75 +101,53 @@ async function openBrowser(): Promise<BrowserContext> {
     launchOptions.executablePath = executablePath;
   }
 
-  const context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, launchOptions);
+  const browserInstance = await chromium.launch(launchOptions);
+  const context = await browserInstance.newContext({
+    locale: 'pt-BR',
+    viewport: { width: 1366, height: 768 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    extraHTTPHeaders: {
+      'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+    },
+  });
 
-  // Stealth: esconde sinais de automação no DOM
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    delete (navigator as any).__proto__.webdriver;
-    Object.defineProperty(navigator, 'plugins', {
-      get: () => [1, 2, 3, 4, 5],
-    });
-    Object.defineProperty(navigator, 'languages', {
-      get: () => ['pt-BR', 'pt', 'en-US', 'en'],
-    });
-    (window as any).chrome = {
-      runtime: {},
-      loadTimes: () => {},
-      csi: () => {},
-      app: {},
-    };
   });
 
-  return context;
+  return { browser: browserInstance, context };
 }
 
 /**
- * Verifica se a página carregou resultados de busca.
- */
-async function hasSearchResults(page: Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const hasProductLinks = document.querySelectorAll('a[href*="/p/MLB"], a[href*="produto.mercadolivre.com.br"], a[href*="mercadolivre.com.br/MLB"]').length > 0;
-    if (hasProductLinks) return true;
-
-    const selectors = [
-      '.ui-search-layout__item',
-      '.ui-search-result__wrapper',
-      '[class*="poly-card"]',
-      '[class*="ui-search"]',
-      '.ui-search-results',
-      'ol.ui-search-layout',
-      'li.ui-search-layout__item',
-      '.ui-search-item',
-      'section.ui-search-results',
-      'div.ui-search-result',
-    ];
-    return selectors.some(s => document.querySelectorAll(s).length > 0);
-  });
-}
-
-/**
- * Extrai ofertas da página de busca do ML com validação de vendedor qualificado.
+ * Extrai ofertas da página de busca do ML.
  */
 async function extractOffers(page: Page): Promise<MLOffer[]> {
   return page.evaluate(() => {
     const results: any[] = [];
-
-    let rawItems = Array.from(document.querySelectorAll('.ui-search-layout__item, [class*="poly-card"], .ui-search-result__wrapper, li.ui-search-layout__item, [class*="ui-search-result"], div.ui-search-result__content-wrapper'));
+    const anchors = Array.from(document.querySelectorAll('a[href]')) as HTMLAnchorElement[];
     
-    if (rawItems.length === 0) {
-      const anchors = document.querySelectorAll('a[href*="mercadolivre.com.br"]');
-      anchors.forEach(a => {
-        const parent = a.closest('li, article, div[class*="search"], div[class*="card"], div[class*="item"]') || a.parentElement;
-        if (parent && !rawItems.includes(parent)) rawItems.push(parent);
-      });
+    const productAnchors = anchors.filter(a => {
+      const href = a.getAttribute('href') || '';
+      return href.includes('/p/MLB') || href.includes('produto.mercadolivre.com.br/MLB') || href.includes('/MLB-');
+    });
+
+    const seenUrls = new Set<string>();
+
+    function parsePrice(text: string | null | undefined): number {
+      if (!text) return 0;
+      const digitsOnly = text.replace(/[^\d]/g, '');
+      if (!digitsOnly) return 0;
+      return parseInt(digitsOnly, 10);
     }
 
-    rawItems.forEach((item, i) => {
+    productAnchors.forEach((a, i) => {
       try {
-        const link = item.querySelector('a[href*="mercadolivre.com.br"]') as HTMLAnchorElement;
-        if (!link) return;
-        let rawHref = link.href.split('#')[0].split('?')[0];
+        let rawHref = (a.href || a.getAttribute('href') || '').split('#')[0].split('?')[0];
+        if (!rawHref || seenUrls.has(rawHref)) return;
+        seenUrls.add(rawHref);
 
         const pMatch = rawHref.match(/\/p\/(MLB\d+)/i);
         const mlbMatch = rawHref.match(/(MLB-?\d+)/i);
@@ -196,46 +159,37 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
           permalink = `https://produto.mercadolivre.com.br/${mlbMatch[1]}`;
         }
 
-        const titleEl = item.querySelector('h2, h3, [class*="title"], .poly-component__title');
+        const container = a.closest('li, article, div[class*="search"], div[class*="poly"], div[class*="card"]') || a.parentElement || a;
+        const titleEl = container.querySelector('h2, h3, [class*="title"], .poly-component__title') || a;
         const title = titleEl?.textContent?.trim() || '';
         if (!title || title.length < 5) return;
 
-        const itemText = item.textContent || '';
-        const itemTextLower = itemText.toLowerCase();
-        const isOfficial = item.querySelector('.ui-search-official-store-label, [class*="official"]') !== null || itemTextLower.includes('loja oficial');
-        const isLeader = itemTextLower.includes('mercadolíder') || itemTextLower.includes('mercadolider');
-        const isFull = itemText.includes('FULL');
-        const sellerEl = item.querySelector('.poly-component__seller, .ui-search-official-store-label, [class*="seller"]');
-        const sellerName = sellerEl?.textContent?.trim() || (isOfficial ? 'Loja Oficial' : (isLeader ? 'MercadoLíder' : ''));
-
-        const isQualified = isOfficial || isLeader || isFull || sellerName.length > 0;
-        if (!isQualified) return;
-
-        const img = item.querySelector('img[src*="http"], img[data-src*="http"]') as HTMLImageElement | null;
-        let thumbnail = img?.src || img?.getAttribute('data-src') || '';
-        if (thumbnail) {
+        const img = container.querySelector('img') || a.querySelector('img');
+        let thumbnail = img ? (img.getAttribute('data-src') || img.src || img.getAttribute('src') || '') : '';
+        if (thumbnail.startsWith('//')) thumbnail = 'https:' + thumbnail;
+        if (thumbnail && thumbnail.includes('mlstatic.com')) {
           thumbnail = thumbnail.replace(/-I\.jpg/g, '-O.jpg').replace(/-V\.jpg/g, '-O.jpg');
         }
 
-        const priceParts = item.querySelectorAll('.andes-money-amount__fraction');
+        const priceParts = container.querySelectorAll('.andes-money-amount__fraction, [class*="fraction"]');
         let currentPrice = 0;
         let originalPrice = 0;
 
         if (priceParts.length >= 2) {
-          const first = priceParts[0];
-          const second = priceParts[1];
-          const firstIsOld = first.closest('s, del, [class*="previous"]') !== null;
+          originalPrice = parsePrice(priceParts[0].textContent);
+          currentPrice = parsePrice(priceParts[1].textContent);
+        } else if (priceParts.length === 1) {
+          currentPrice = parsePrice(priceParts[0].textContent);
+          originalPrice = currentPrice;
+        }
 
-          if (firstIsOld) {
-            originalPrice = parseFloat(first.textContent?.replace(/\./g, '') || '0');
-            currentPrice = parseFloat(second.textContent?.replace(/\./g, '') || '0');
-          } else {
-            currentPrice = parseFloat(first.textContent?.replace(/\./g, '') || '0');
+        if (currentPrice <= 0) {
+          const text = container.textContent || '';
+          const match = text.match(/R\$\s*([\d\.]+)/);
+          if (match) {
+            currentPrice = parsePrice(match[1]);
             originalPrice = currentPrice;
           }
-        } else if (priceParts.length === 1) {
-          currentPrice = parseFloat(priceParts[0].textContent?.replace(/\./g, '') || '0');
-          originalPrice = currentPrice;
         }
 
         if (currentPrice <= 0) return;
@@ -244,13 +198,14 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
           ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100)
           : 0;
 
-        const freeShipping = itemTextLower.includes('frete grátis');
+        const containerTextLower = (container.textContent || '').toLowerCase();
+        const freeShipping = containerTextLower.includes('frete grátis');
 
-        const isLowest30Days = itemTextLower.includes('menor preço') ||
-                               itemTextLower.includes('menor preco') ||
-                               itemTextLower.includes('últimos 30 dias') ||
-                               itemTextLower.includes('ultimos 30 dias') ||
-                               itemTextLower.includes('melhor preço');
+        const isLowest30Days = containerTextLower.includes('menor preço') ||
+                               containerTextLower.includes('menor preco') ||
+                               containerTextLower.includes('últimos 30 dias') ||
+                               containerTextLower.includes('ultimos 30 dias') ||
+                               containerTextLower.includes('melhor preço');
 
         results.push({
           id: `ml-${i}`,
@@ -261,7 +216,7 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
           currentPrice,
           discountPercent,
           freeShipping,
-          seller: sellerName || 'Vendedor Qualificado',
+          seller: 'Vendedor Qualificado',
           condition: 'new',
           soldQuantity: 0,
           isLowest30Days,
@@ -274,20 +229,22 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
 }
 
 /**
- * Busca ofertas no Mercado Livre utilizando um contexto de navegador existente (ou cria um novo se omitido).
+ * Busca ofertas no Mercado Livre utilizando uma página existente.
  */
 export async function searchOffers(
   query: string,
   config: AppConfig,
   existingContext?: BrowserContext
 ): Promise<MLOffer[]> {
-  const shouldCloseContext = !existingContext;
+  let createdBrowser: Browser | null = null;
   let context: BrowserContext | null = existingContext || null;
   let page: Page | null = null;
 
   try {
     if (!context) {
-      context = await openBrowser();
+      const res = await openBrowser();
+      createdBrowser = res.browser;
+      context = res.context;
     }
 
     page = await context.newPage();
@@ -305,61 +262,36 @@ export async function searchOffers(
 
     await page.waitForTimeout(2500);
 
-    let hasResults = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        hasResults = await hasSearchResults(page);
-        if (hasResults) break;
-        await page.waitForTimeout(1500);
-      } catch {
-        await page.waitForTimeout(1500);
-      }
-    }
+    // Scroll leve para carregar lazy images
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 4));
+    await page.waitForTimeout(1000);
 
-    const isCloud = !!process.env.RENDER || process.env.HEADLESS === 'true' || process.platform !== 'win32';
+    const offers = await extractOffers(page);
 
-    if (!hasResults && isCloud) {
-      const directOffers = await extractOffers(page);
-      if (directOffers.length > 0) {
-        hasResults = true;
-      }
-    }
+    const queryLower = query.toLowerCase().trim();
+    const isGenericQuery = ['ofertas do dia', 'mais vendidos', 'promoção', 'desconto', 'oferta'].includes(queryLower);
 
-    if (hasResults) {
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 3));
-      await page.waitForTimeout(1000);
+    const queryKeywords = queryLower
+      .replace(/[^a-z0-9\s]/g, '')
+      .split(/\s+/)
+      .filter((w) => w.length >= 3);
 
-      const offers = await extractOffers(page);
+    const relevantOffers = offers.filter((offer) => {
+      if (isGenericQuery) return true;
+      const titleLower = offer.title.toLowerCase();
+      return queryKeywords.some((keyword) => titleLower.includes(keyword));
+    });
 
-      const queryLower = query.toLowerCase().trim();
-      const isGenericQuery = ['ofertas do dia', 'mais vendidos', 'promoção', 'desconto', 'oferta'].includes(queryLower);
-
-      const queryKeywords = queryLower
-        .replace(/[^a-z0-9\s]/g, '')
-        .split(/\s+/)
-        .filter((w) => w.length >= 3);
-
-      const relevantOffers = offers.filter((offer) => {
-        if (isGenericQuery) return true;
-        const titleLower = offer.title.toLowerCase();
-        return queryKeywords.some((keyword) => titleLower.includes(keyword));
-      });
-
-      console.log(`  📦 ${offers.length} no ML ➔ ${relevantOffers.length} filtrados com precisão para "${query}"`);
-
-      await page.close().catch(() => {});
-      if (shouldCloseContext && context) await context.close().catch(() => {});
-      return relevantOffers;
-    }
+    console.log(`  📦 ${offers.length} no ML ➔ ${relevantOffers.length} filtrados com precisão para "${query}"`);
 
     await page.close().catch(() => {});
-    if (shouldCloseContext && context) await context.close().catch(() => {});
-    return [];
+    if (createdBrowser) await createdBrowser.close().catch(() => {});
+    return relevantOffers;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error(`  ❌ Erro: ${msg}`);
+    console.error(`  ❌ Erro ao buscar "${query}": ${msg}`);
     if (page) await page.close().catch(() => {});
-    if (shouldCloseContext && context) await context.close().catch(() => {});
+    if (createdBrowser) await createdBrowser.close().catch(() => {});
     return [];
   }
 }
@@ -376,10 +308,13 @@ export async function collectOffers(
 
   console.log(`\n📚 Histórico carregado: ${history.size} registros de envios anteriores (produtos não serão repetidos).`);
 
+  let sharedBrowser: Browser | null = null;
   let sharedContext: BrowserContext | null = null;
 
   try {
-    sharedContext = await openBrowser();
+    const res = await openBrowser();
+    sharedBrowser = res.browser;
+    sharedContext = res.context;
 
     for (const query of queries) {
       console.log(`\n🔍 Buscando: "${query}"...`);
@@ -402,8 +337,8 @@ export async function collectOffers(
   } catch (err) {
     console.error('[ML] Erro no ciclo de coleta de ofertas:', err);
   } finally {
-    if (sharedContext) {
-      await sharedContext.close().catch(() => {});
+    if (sharedBrowser) {
+      await sharedBrowser.close().catch(() => {});
     }
   }
 
