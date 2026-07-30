@@ -8,6 +8,16 @@
   ],
   "routes": [
     {
+      "src": "/qr",
+      "status": 302,
+      "headers": { "Location": "https://robo-ml.onrender.com/qr" }
+    },
+    {
+      "src": "/api/pairing-code",
+      "status": 302,
+      "headers": { "Location": "https://robo-ml.onrender.com/api/pairing-code" }
+    },
+    {
       "src": "/(.*)",
       "dest": "/public/index.html"
     }
