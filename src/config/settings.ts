@@ -155,7 +155,7 @@ export async function loadConfigAsync(): Promise<AppConfig> {
     },
     facebook: {
       enabled: dbSettings.FB_ENABLED ? dbSettings.FB_ENABLED === 'true' : process.env.FB_ENABLED === 'true',
-      groupUrls: dbSettings.FB_GROUP_URLS ? parseList(dbSettings.FB_GROUP_URLS) : parseList(process.env.FB_GROUP_URLS),
+      groupUrls: parseList(dbSettings.FB_GROUP_URLS).length > 0 ? parseList(dbSettings.FB_GROUP_URLS) : parseList(process.env.FB_GROUP_URLS),
       maxGroupsPerCycle: Number(dbSettings.FB_MAX_GROUPS_PER_CYCLE || process.env.FB_MAX_GROUPS_PER_CYCLE || 64),
       delayBetweenPostsSec: Number(dbSettings.FB_DELAY_BETWEEN_POSTS || process.env.FB_DELAY_BETWEEN_POSTS || 60),
       waGroupLink: dbSettings.FB_WA_GROUP_LINK || process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',

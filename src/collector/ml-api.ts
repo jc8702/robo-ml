@@ -159,19 +159,19 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
           permalink = `https://produto.mercadolivre.com.br/${mlbMatch[1]}`;
         }
 
-        const container = a.closest('li, article, div[class*="search"], div[class*="poly"], div[class*="card"]') || a.parentElement || a;
-        const titleEl = container.querySelector('h2, h3, [class*="title"], .poly-component__title') || a;
+        const card = a.closest('.poly-card, .ui-search-result__wrapper, .ui-search-layout__item, li, article') || a.parentElement || a;
+        const titleEl = card.querySelector('h2, h3, .poly-component__title, [class*="title"]') || a;
         const title = titleEl?.textContent?.trim() || '';
         if (!title || title.length < 5) return;
 
-        const img = container.querySelector('img') || a.querySelector('img');
-        let thumbnail = img ? (img.getAttribute('data-src') || img.src || img.getAttribute('src') || '') : '';
+        const imgEl = card.querySelector('img.poly-component__picture, img[data-testid="picture"], img') as HTMLImageElement | null;
+        let thumbnail = imgEl ? (imgEl.getAttribute('src') || imgEl.src || imgEl.getAttribute('data-src') || '') : '';
         if (thumbnail.startsWith('//')) thumbnail = 'https:' + thumbnail;
         if (thumbnail && thumbnail.includes('mlstatic.com')) {
-          thumbnail = thumbnail.replace(/-I\.jpg/g, '-O.jpg').replace(/-V\.jpg/g, '-O.jpg');
+          thumbnail = thumbnail.replace(/-I\.jpg/g, '-O.jpg').replace(/-V\.jpg/g, '-O.jpg').replace(/-F\.jpg/g, '-O.jpg');
         }
 
-        const priceParts = container.querySelectorAll('.andes-money-amount__fraction, [class*="fraction"]');
+        const priceParts = card.querySelectorAll('.andes-money-amount__fraction, [class*="fraction"]');
         let currentPrice = 0;
         let originalPrice = 0;
 
@@ -184,7 +184,7 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
         }
 
         if (currentPrice <= 0) {
-          const text = container.textContent || '';
+          const text = card.textContent || '';
           const match = text.match(/R\$\s*([\d\.]+)/);
           if (match) {
             currentPrice = parsePrice(match[1]);
@@ -198,14 +198,14 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
           ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100)
           : 0;
 
-        const containerTextLower = (container.textContent || '').toLowerCase();
-        const freeShipping = containerTextLower.includes('frete grátis');
+        const cardTextLower = (card.textContent || '').toLowerCase();
+        const freeShipping = cardTextLower.includes('frete grátis');
 
-        const isLowest30Days = containerTextLower.includes('menor preço') ||
-                               containerTextLower.includes('menor preco') ||
-                               containerTextLower.includes('últimos 30 dias') ||
-                               containerTextLower.includes('ultimos 30 dias') ||
-                               containerTextLower.includes('melhor preço');
+        const isLowest30Days = cardTextLower.includes('menor preço') ||
+                               cardTextLower.includes('menor preco') ||
+                               cardTextLower.includes('últimos 30 dias') ||
+                               cardTextLower.includes('ultimos 30 dias') ||
+                               cardTextLower.includes('melhor preço');
 
         results.push({
           id: `ml-${i}`,
@@ -260,13 +260,19 @@ export async function searchOffers(
       await page.waitForTimeout(2000);
     }
 
-    await page.waitForTimeout(2500);
+    // Espera a navegação estabilizar (captura redirecionamentos cliente)
+    await page.waitForTimeout(3000);
 
-    // Scroll leve para carregar lazy images
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 4));
-    await page.waitForTimeout(1000);
-
-    const offers = await extractOffers(page);
+    let offers: MLOffer[] = [];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        offers = await extractOffers(page);
+        if (offers.length > 0) break;
+        await page.waitForTimeout(1500);
+      } catch {
+        await page.waitForTimeout(1500);
+      }
+    }
 
     const queryLower = query.toLowerCase().trim();
     const isGenericQuery = ['ofertas do dia', 'mais vendidos', 'promoção', 'desconto', 'oferta'].includes(queryLower);
