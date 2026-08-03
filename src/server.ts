@@ -9,8 +9,29 @@ import { currentPairingCode, pairingCodeRequestedAt, currentQrRaw } from './what
 
 // initDb sera chamado apos o servidor subir (ver callback do listen abaixo)
 
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+function getPublicDir(): string {
+  const candidates = [
+    join(__dirname, 'public'),
+    join(__dirname, '..', 'public'),
+    join(process.cwd(), 'dist', 'public'),
+    join(process.cwd(), 'public'),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(join(dir, 'index.html'))) {
+      return dir;
+    }
+  }
+  return join(process.cwd(), 'public');
+}
+
+const PUBLIC_DIR = getPublicDir();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const PUBLIC_DIR = join(process.cwd(), 'public');
 const ENV_FILE = join(process.cwd(), '.env');
 const HISTORY_FILE = join(process.cwd(), '.sent-history.json');
 

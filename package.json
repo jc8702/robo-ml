@@ -4,7 +4,7 @@
   "description": "Bot local para coletar ofertas do Mercado Livre e gerar mensagens com links de afiliado para WhatsApp",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"import('fs').then(fs => fs.cpSync('public', 'dist/public', {recursive: true}))\"",
     "start": "node dist/server.js",
     "ofertas": "npm run build && node dist/index.js",
     "ofertas:query": "npm run build && node dist/index.js --query",
