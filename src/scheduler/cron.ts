@@ -1,12 +1,33 @@
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import type { AppConfig } from '../config/settings.js';
+import { loadConfigAsync } from '../config/settings.js';
 import { collectOffers } from '../collector/ml-api.js';
 import { convertOffers } from '../affiliate/link-converter.js';
 import { sendOfferWithPhoto, initWhatsAppClient } from '../whatsapp/client.js';
 import { saveSentOffersToHistory } from '../collector/history.js';
 import { postOffersToFacebookGroups } from '../facebook/fb-poster.js';
 
-export async function runAutomaticCycle(config: AppConfig): Promise<void> {
+/** Referência do cron agendado para permitir cancelamento externo */
+let scheduledTask: ScheduledTask | null = null;
+
+/** Retorna a referência do cron ativo (para cancelamento via API) */
+export function getScheduledTask(): ScheduledTask | null {
+  return scheduledTask;
+}
+
+/** Para o cron agendado */
+export function stopScheduler(): void {
+  if (scheduledTask) {
+    scheduledTask.stop();
+    scheduledTask = null;
+    console.log('[SCHEDULER] Agendador parado com sucesso.');
+  }
+}
+
+export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> {
+  // Recarrega config do Neon a cada ciclo para pegar alterações feitas pelo painel web
+  const config = await loadConfigAsync();
+
   console.log(`\n[CRON] [${new Date().toLocaleTimeString('pt-BR')}] Iniciando ciclo automatico de ofertas...`);
 
   const groupJid = process.env.WHATSAPP_GROUP_ID;
@@ -87,9 +108,11 @@ export async function startScheduler(config: AppConfig): Promise<void> {
 
   await runAutomaticCycle(config);
 
-  cron.schedule(cronExpression, () => {
-    runAutomaticCycle(config).catch((err) => {
+  // Guarda a referência para permitir cancelamento via stopScheduler()
+  scheduledTask = cron.schedule(cronExpression, () => {
+    runAutomaticCycle().catch((err) => {
       console.error('[CRON] Erro no ciclo automatico:', err);
     });
   });
 }
+

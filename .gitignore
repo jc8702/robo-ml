@@ -12,4 +12,7 @@ test-*.mts
 test-*.ts
 test-*.html
 test-*.jpg
-*.log
+.wa-profile/
+wa-qr-screenshot.png
+temp_offer_*.jpg
+clear-wa-session.mjs

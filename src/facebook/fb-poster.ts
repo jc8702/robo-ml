@@ -1,45 +1,14 @@
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { join } from 'node:path';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync } from 'node:fs';
 import type { AffiliateOffer } from '../affiliate/link-converter.js';
 import { formatFacebookOffer, formatFacebookWaComment } from '../formatter/facebook.js';
+import { findBrowserPath, isCloudEnvironment } from '../config/browser.js';
 
 const FB_PROFILE_DIR = join(process.cwd(), '.fb-profile');
 const TEMP_IMG_DIR = join(process.cwd(), '.fb-temp-images');
 
-/**
- * Encontra o Chrome/Chromium no sistema (reutiliza a mesma lógica do ml-api.ts).
- */
-function findBrowserPath(): string {
-  const homeDir = homedir();
-  const candidates: string[] = [];
-
-  // Playwright Chromium
-  const pwDir = join(homeDir, 'AppData', 'Local', 'ms-playwright');
-  if (existsSync(pwDir)) {
-    const dirs = readdirSync(pwDir)
-      .filter((d: string) => d.startsWith('chromium') && !d.includes('headless'))
-      .sort();
-    for (const dir of dirs.reverse()) {
-      candidates.push(join(pwDir, dir, 'chrome-win', 'chrome.exe'));
-    }
-  }
-
-  // Chrome do sistema
-  candidates.push(
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    join(homeDir, 'AppData', 'Local', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-  );
-
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-
-  throw new Error('Chrome/Chromium não encontrado. Instale Chrome ou execute: npx playwright install chromium');
-}
+// findBrowserPath() e isCloudEnvironment() importados de ../config/browser.js
 
 /**
  * Delay aleatório entre min e max ms para simular comportamento humano.
@@ -55,13 +24,14 @@ function randomDelay(minMs: number, maxMs: number): Promise<void> {
  */
 async function openFacebookBrowser(): Promise<BrowserContext> {
   const executablePath = findBrowserPath();
+  const isCloud = isCloudEnvironment();
 
   if (!existsSync(FB_PROFILE_DIR)) {
     mkdirSync(FB_PROFILE_DIR, { recursive: true });
   }
 
   const context = await chromium.launchPersistentContext(FB_PROFILE_DIR, {
-    headless: false,
+    headless: isCloud,
     executablePath,
     locale: 'pt-BR',
     viewport: { width: 1366, height: 768 },

@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { exec } from 'node:child_process';
 import { loadConfig, loadConfigAsync, type AppConfig } from './config/settings.js';
-import { runAutomaticCycle, startScheduler } from './scheduler/cron.js';
+import { runAutomaticCycle, startScheduler, stopScheduler } from './scheduler/cron.js';
 import { dbSaveMultipleSettings, initDb } from './db/index.js';
 import { currentPairingCode, pairingCodeRequestedAt, currentQrRaw } from './whatsapp/client.js';
 
@@ -224,22 +224,25 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       if (Array.isArray(body.categories)) {
         updates.ML_CATEGORIES = body.categories.join(',');
       }
-      if (typeof body.minPrice === 'number') updates.ML_MIN_PRICE = String(body.minPrice);
-      if (typeof body.maxPrice === 'number') updates.ML_MAX_PRICE = String(body.maxPrice);
-      if (typeof body.minDiscount === 'number') updates.ML_MIN_DISCOUNT = String(body.minDiscount);
-      if (typeof body.maxResults === 'number') updates.ML_MAX_RESULTS = String(body.maxResults);
+      if (Array.isArray(body.queries)) {
+        updates.ML_SEARCH_QUERIES = body.queries.join(',');
+      }
+      if (body.minPrice !== undefined && body.minPrice !== '') updates.ML_MIN_PRICE = String(body.minPrice);
+      if (body.maxPrice !== undefined && body.maxPrice !== '') updates.ML_MAX_PRICE = String(body.maxPrice);
+      if (body.minDiscount !== undefined && body.minDiscount !== '') updates.ML_MIN_DISCOUNT = String(body.minDiscount);
+      if (body.maxResults !== undefined && body.maxResults !== '') updates.ML_MAX_RESULTS = String(body.maxResults);
       if (typeof body.cronSchedule === 'string') updates.AUTO_SCHEDULE_CRON = body.cronSchedule;
-      if (typeof body.fbEnabled === 'boolean') updates.FB_ENABLED = body.fbEnabled ? 'true' : 'false';
+      if (body.fbEnabled !== undefined) updates.FB_ENABLED = body.fbEnabled ? 'true' : 'false';
       if (Array.isArray(body.fbGroupUrls)) updates.FB_GROUP_URLS = body.fbGroupUrls.join(',');
-      if (typeof body.fbMaxGroupsPerCycle === 'number') updates.FB_MAX_GROUPS_PER_CYCLE = String(body.fbMaxGroupsPerCycle);
-      if (typeof body.fbDelayBetweenPosts === 'number') updates.FB_DELAY_BETWEEN_POSTS = String(body.fbDelayBetweenPosts);
+      if (body.fbMaxGroupsPerCycle !== undefined && body.fbMaxGroupsPerCycle !== '') updates.FB_MAX_GROUPS_PER_CYCLE = String(body.fbMaxGroupsPerCycle);
+      if (body.fbDelayBetweenPosts !== undefined && body.fbDelayBetweenPosts !== '') updates.FB_DELAY_BETWEEN_POSTS = String(body.fbDelayBetweenPosts);
       if (typeof body.fbWaGroupLink === 'string') updates.FB_WA_GROUP_LINK = body.fbWaGroupLink;
-      if (typeof body.fbAutoJoin === 'boolean') updates.FB_AUTO_JOIN = body.fbAutoJoin ? 'true' : 'false';
+      if (body.fbAutoJoin !== undefined) updates.FB_AUTO_JOIN = body.fbAutoJoin ? 'true' : 'false';
 
       await dbSaveMultipleSettings(updates);
       updateEnvFile(updates);
 
-      return sendJson({ success: true, message: 'Configuracoes atualizadas no Neon PostgreSQL' });
+      return sendJson({ success: true, message: 'Configurações atualizadas no Neon PostgreSQL e sincronizadas com sucesso!' });
     } catch (err) {
       return sendJson({ success: false, error: String(err) }, 400);
     }
@@ -272,7 +275,8 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
   // POST /api/bot/stop
   if (method === 'POST' && (url === '/api/bot/stop' || url.endsWith('/stop'))) {
     isBotRunning = false;
-    return sendJson({ isRunning: false, message: 'Automacao pausada.' });
+    stopScheduler();
+    return sendJson({ isRunning: false, message: 'Automacao pausada e agendador cancelado.' });
   }
 
   // POST /api/bot/run-now
@@ -297,6 +301,15 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
 }
 
 const server = createServer(handleRequest);
+
+// --- Handlers de exceção global para resiliência 24/7 ---
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] uncaughtException:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] unhandledRejection:', reason);
+});
 
 // Inicia o servidor (local ou Render)
 if (process.env.VERCEL !== '1') {

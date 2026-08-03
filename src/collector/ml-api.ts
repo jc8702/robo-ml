@@ -1,8 +1,8 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { existsSync, readdirSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import type { AppConfig } from '../config/settings.js';
+import { findBrowserPath, isCloudEnvironment } from '../config/browser.js';
 import { loadSentHistory, normalizeTitleKey, isLowestPriceIn30Days } from './history.js';
 
 /** Representa uma oferta coletada do Mercado Livre */
@@ -23,69 +23,17 @@ export interface MLOffer {
 
 const BROWSER_PROFILE_DIR = join(process.cwd(), '.chrome-profile');
 
-/**
- * Encontra o Chrome/Chromium no sistema (Windows ou Linux/Docker/Render).
- */
-function findBrowserPath(): string | undefined {
-  if (process.env.EXECUTABLE_PATH && existsSync(process.env.EXECUTABLE_PATH)) {
-    return process.env.EXECUTABLE_PATH;
-  }
-
-  const homeDir = homedir();
-  const candidates: string[] = [];
-
-  if (process.platform === 'win32') {
-    const pwDir = join(homeDir, 'AppData', 'Local', 'ms-playwright');
-    if (existsSync(pwDir)) {
-      const dirs = readdirSync(pwDir)
-        .filter((d: string) => d.startsWith('chromium'))
-        .sort();
-      for (const dir of dirs.reverse()) {
-        candidates.push(join(pwDir, dir, 'chrome-win', 'chrome.exe'));
-      }
-    }
-    candidates.push(
-      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-      join(homeDir, 'AppData', 'Local', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    );
-  } else {
-    // Linux / Docker / Render
-    const pwDir = '/ms-playwright';
-    if (existsSync(pwDir)) {
-      try {
-        const dirs = readdirSync(pwDir)
-          .filter((d: string) => d.startsWith('chromium'))
-          .sort();
-        for (const dir of dirs.reverse()) {
-          candidates.push(join(pwDir, dir, 'chrome-linux', 'chrome'));
-        }
-      } catch {}
-    }
-    candidates.push(
-      '/usr/bin/google-chrome-stable',
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/chromium'
-    );
-  }
-
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-
-  return undefined;
-}
+// findBrowserPath() e isCloudEnvironment() importados de ../config/browser.js
 
 /**
  * Cria uma instância limpa do browser + contexto com User-Agent oficial de Desktop Chrome.
  */
 async function openBrowser(): Promise<{ browser: Browser; context: BrowserContext }> {
   const executablePath = findBrowserPath();
-  const isCloud = !!process.env.RENDER || process.env.HEADLESS === 'true' || process.platform !== 'win32';
+  const isCloud = isCloudEnvironment();
 
   const launchOptions: any = {
-    headless: isCloud,
+    headless: true,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -126,12 +74,14 @@ async function openBrowser(): Promise<{ browser: Browser; context: BrowserContex
  */
 async function extractOffers(page: Page): Promise<MLOffer[]> {
   return page.evaluate(() => {
+    (window as any).__name = (fn: any) => fn;
+    const __name = (fn: any) => fn;
     const results: any[] = [];
     const anchors = Array.from(document.querySelectorAll('a[href]')) as HTMLAnchorElement[];
     
     const productAnchors = anchors.filter(a => {
-      const href = a.getAttribute('href') || '';
-      return href.includes('/p/MLB') || href.includes('produto.mercadolivre.com.br/MLB') || href.includes('/MLB-');
+      const href = (a.getAttribute('href') || a.href || '').toLowerCase();
+      return href.includes('/p/mlb') || href.includes('/mlb-') || href.includes('produto.mercadolivre.com.br/mlb');
     });
 
     const seenUrls = new Set<string>();
@@ -171,16 +121,35 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
           thumbnail = thumbnail.replace(/-I\.jpg/g, '-O.jpg').replace(/-V\.jpg/g, '-O.jpg').replace(/-F\.jpg/g, '-O.jpg');
         }
 
-        const priceParts = card.querySelectorAll('.andes-money-amount__fraction, [class*="fraction"]');
+        const moneyElements = Array.from(card.querySelectorAll('.andes-money-amount')) as HTMLElement[];
         let currentPrice = 0;
         let originalPrice = 0;
 
-        if (priceParts.length >= 2) {
-          originalPrice = parsePrice(priceParts[0].textContent);
-          currentPrice = parsePrice(priceParts[1].textContent);
-        } else if (priceParts.length === 1) {
-          currentPrice = parsePrice(priceParts[0].textContent);
+        moneyElements.forEach(el => {
+          const frac = el.querySelector('.andes-money-amount__fraction, [class*="fraction"]')?.textContent;
+          const val = parsePrice(frac);
+          if (!val) return;
+
+          const isPrevious = el.classList.contains('andes-money-amount--previous') ||
+                             el.closest('.andes-money-amount--previous, s, del') !== null;
+
+          if (isPrevious) {
+            originalPrice = val;
+          } else if (currentPrice === 0) {
+            currentPrice = val;
+          }
+        });
+
+        if (currentPrice === 0 && moneyElements.length > 0) {
+          currentPrice = parsePrice(moneyElements[0].querySelector('.andes-money-amount__fraction, [class*="fraction"]')?.textContent);
+        }
+
+        if (originalPrice === 0) {
           originalPrice = currentPrice;
+        } else if (originalPrice < currentPrice) {
+          const temp = originalPrice;
+          originalPrice = currentPrice;
+          currentPrice = temp;
         }
 
         if (currentPrice <= 0) {
@@ -261,15 +230,19 @@ export async function searchOffers(
     }
 
     // Espera a navegação estabilizar (captura redirecionamentos cliente)
-    await page.waitForTimeout(3000);
+    await page.waitForSelector('.poly-card, .ui-search-result, article, li.ui-search-layout__item', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+    console.log(`  🔎 URL Resolvida: "${page.url()}" | Título: "${await page.title()}"`);
 
     let offers: MLOffer[] = [];
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         offers = await extractOffers(page);
+        console.log(`  [DEBUG] Tentativa ${attempt + 1}: ${offers.length} ofertas brutas extraídas`);
         if (offers.length > 0) break;
         await page.waitForTimeout(1500);
-      } catch {
+      } catch (err) {
+        console.log(`  [DEBUG] Tentativa ${attempt + 1} falhou com erro: ${err}`);
         await page.waitForTimeout(1500);
       }
     }

@@ -11,6 +11,9 @@
     "auto": "npm run build && node dist/index.js --auto",
     "gui": "npm run build && node dist/server.js",
     "list-groups": "npm run build && node dist/list-groups.js",
+    "test:pipeline": "tsx src/test-pipeline.ts",
+    "wa:connect": "tsx src/wa-connect.ts",
+    "wa:reset": "tsx src/wa-reset.ts",
     "dev": "tsx watch src/index.ts"
   },
   "keywords": [

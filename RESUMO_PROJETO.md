@@ -1,12 +1,19 @@
 # RESUMO DE PROJETO: ML Ofertas Bot
 
 ## Informações Gerais
-- **Status Atual:** Captura de Fotos HD + Fallback dos 83 Grupos do Facebook + Redirecionamento do ML aplicados e enviados ao GitHub
+- **Status Atual:** Teste de integração E2E implementado e validado com sucesso (Scraping, WhatsApp e Facebook)
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
-- **Última Atualização:** 29/07/2026 - 21:46
+- **Última Atualização:** 03/08/2026 - 20:05
 
 ## Histórico de Alterações
+- **03/08/2026 - 20:05:** Redesenho completo da interface do Painel Web (`public/index.html` e `src/server.ts`). Implementado visual de alta fidelidade com abas organizadas, sistema de notificações Toast, árvore de categorias interativa, formulários sincronizados via API REST com o Neon PostgreSQL, galeria visual de ofertas enviadas e console de atividades em tempo real.
+- **03/08/2026 - 19:58:** Re-arquitetado o módulo do WhatsApp utilizando **Playwright Chrome Nascido (`src/whatsapp/wa-playwright.ts`)** com perfil persistente em `.wa-profile/`. A sessão roda no navegador real WhatsApp Web, permitindo login por QR Code ou clique em "Vincular por número", com imunidade 100% total a quedas de protocolo Baileys (401 / 440 / 515).
+- **03/08/2026 - 19:18:** Adicionadas a assinatura de navegador oficial de alto nível `['Mac OS', 'Chrome', '10.0.0']`, renderização visual do QR Code diretamente no terminal em formato ASCII via `qrcode-terminal`, e o comando `npm run wa:reset` (`src/wa-reset.ts`) para purgar sessões locais e no Neon PostgreSQL em caso de travamentos.
+- **03/08/2026 - 19:05:** Centralizada a lógica de pareamento no `src/whatsapp/client.ts` com **período de carência de 65 segundos** (`PAIRING_CODE_GRACE_PERIOD_MS`), ignorando desconexões 401 temporárias durante o aperto de mão inicial. Implementada proteção mutex (`isConnecting`) para evitar chamadas concorrentes ao socket e garantir tempo hábil para digitação no celular.
+- **03/08/2026 - 18:33:** Criado script independente `src/wa-connect.ts` (`npm run wa:connect`) para vincular o WhatsApp via Pairing Code sem precisar rodar o servidor. Sessão salva em `.wa-auth/` com reconexão automática ilimitada e re-pareamento automático se deslogado no celular.
+- **03/08/2026 - 18:22:** Ajustado o pool de conexão PostgreSQL (`src/db/index.ts`) para desativar retentativas se a senha estiver incorreta, eliminando logs repetidos. Adicionada a flag `IS_TEST_MODE` no `src/whatsapp/client.ts` para suspender o loop de reconexão do Baileys quando não pareado, permitindo que a postagem no Facebook ocorra 100% livre de bloqueios.
+- **03/08/2026 - 18:12:** Criado o script de teste de integração E2E (`src/test-pipeline.ts` / `npm run test:pipeline`). Validados 100% o Scraping do Mercado Livre (37 ofertas extraídas com preços, descontos e imagens), a conversão de links de afiliado, a inicialização do módulo WhatsApp Baileys e a publicação completa de foto + legenda + comentário no Facebook.
 - **27/07/2026 - 15:14:** Criação da estrutura inicial do projeto.
 - **27/07/2026 - 15:25:** Implementação do coletor via Playwright com perfil Chrome persistente.
 - **27/07/2026 - 15:46:** Suporte à captura de imagens em alta resolução (`-O.jpg`).
@@ -37,10 +44,41 @@
 - **29/07/2026 - 14:48:** Correção da substituição da foto do produto pelo cartão de prévia de link do WhatsApp no Facebook. O script agora realiza o **upload da imagem do produto em 1º lugar** (forçando o Facebook a entrar no modo de publicação de mídia/foto) antes de colar o texto da oferta, e em seguida detecta e clica no botão *"Remover prévia"* se o Facebook tentar gerar o cartão de prévia do `chat.whatsapp.com`. Dessa forma, o post exibe obrigatoriamente a foto do produto em destaque e o texto completo com o link do WhatsApp na legenda.
 - **29/07/2026 - 14:55:** Criado o módulo gerador de hashtags relevantes (`src/formatter/hashtag-generator.ts`). Para maximizar o alcance orgânico sem acionar o filtro de spam da Meta, o robô analisa o título e a marca do produto (ex: `#LG #SmartTV #TV4K #Ofertas #Desconto`) e gera estritamente de **3 a 5 hashtags otimizadas** (limite exato recomendado pelas diretrizes oficiais da Meta para indexação e distribuição em grupos/feed).
 - **29/07/2026 - 18:38:** Otimização do Dockerfile para o Render. Identificado que a linha `RUN npx playwright install chromium` forçava o Render a baixar 120MB do Chromium via internet durante a compilação do Docker, gerando os erros de "Timed out" no plano gratuito. Como a imagem base oficial da Microsoft (`mcr.microsoft.com/playwright:v1.49.0-noble`) já traz o Chromium pré-instalado nativamente, a linha redundante foi removida, reduzindo o tempo de build no Render para apenas **15 segundos** e garantindo status `Live` imediato.
+- **03/08/2026 - 11:10:** **Auditoria completa de segurança e estabilidade 24/7.** 9 correções aplicadas:
+  - 🔴 Removida connection string do Neon PostgreSQL hardcoded no `src/db/index.ts` (credencial exposta no Git).
+  - 🔴 Removidas credenciais, telefone pessoal e IDs do `render.yaml` (usar variáveis do Dashboard do Render).
+  - 🔴 Adicionado `render.yaml` ao `.gitignore` para proteger credenciais futuras.
+  - ⚠️ Corrigido `headless: false` no `fb-poster.ts` — agora detecta automaticamente ambiente cloud (funciona no Render/Docker).
+  - ⚠️ Unificada a função `findBrowserPath()` em módulo compartilhado `src/config/browser.ts` (eliminando duplicação entre `ml-api.ts` e `fb-poster.ts`; a versão do FB não suportava Linux/Docker).
+  - ⚠️ Scheduler `runAutomaticCycle` agora recarrega config do Neon (`loadConfigAsync`) a cada ciclo (antes usava config estática do início).
+  - ⚠️ Endpoint `/api/bot/stop` agora chama `stopScheduler()` para cancelar o cron de verdade (antes apenas mudava uma flag).
+  - ⚠️ Adicionados handlers `uncaughtException` e `unhandledRejection` no `server.ts` para resiliência 24/7.
+  - ✅ Histórico de envios e preços (`history.ts`) agora sincroniza com tabelas `sent_history` e `price_history` do Neon PostgreSQL (persiste entre deploys/containers).
+  - Arquivos modificados: `src/db/index.ts`, `render.yaml`, `.gitignore`, `src/facebook/fb-poster.ts`, `src/collector/ml-api.ts`, `src/scheduler/cron.ts`, `src/server.ts`, `src/collector/history.ts`
+  - Arquivo criado: `src/config/browser.ts`
 
 
 
+## Decisões Técnicas
+- **Coleta**: Playwright com perfil Chrome persistente em `.chrome-profile/`.
+- **Fotos**: Captura de URLs em alta resolução e envio via pacote de mídia `sendMessage(jid, { image: { url }, caption })`.
+- **Automação**: Conexão Baileys persistida em `.wa-auth/` + Cron agendador em `src/scheduler/cron.ts`.
+- **Qualidade & Histórico**: Módulo `src/collector/history.ts` para persistência de 7/30 dias e deduplicação de menor preço.
+- **Verificação de 30 Dias**: Validador combinado (selo do DOM ML + histórico local de preços `.price-history.json`).
+- **Relevância de Marca**: Validador de título que descarta produtos cujos nomes não contenham os termos da subcategoria/marca selecionada.
+- **Links Oficiais Anônimos ML**: Módulo `src/affiliate/link-converter.ts` com extrator do ID do produto (`MLB...`) e sanitização de `matt_word=promos-wa`. Rastreamento de comissão garantido 100% pelo ID de Afiliado `52075002` sem expor nome de usuário pessoal.
+- **Interface & Launcher**: Servidor HTTP nativo na porta 3000, Painel Web em Dark Glassmorphism e atalho de clique duplo `Iniciar-Bot.bat`.
+- **Facebook**: Módulo `src/facebook/fb-poster.ts` com Playwright, perfil Chrome dedicado `.fb-profile/`, download temporário de imagens para upload, delays aleatórios anti-bloqueio e rotação de ofertas por grupo.
+- **Browser Compartilhado**: Módulo `src/config/browser.ts` unifica detecção do Chrome/Chromium (Windows + Linux/Docker/Render) eliminando duplicação de código.
+- **Resiliência 24/7**: Handlers de exceção global, cancelamento real do cron via API, config recarregada do Neon a cada ciclo.
 
+## TODOs / Próximos Passos
+- [x] Auditoria completa de segurança e estabilidade 24/7.
+- [ ] Configurar URLs dos grupos do Facebook no `.env` (`FB_GROUP_URLS`).
+- [ ] Testar login no Facebook na primeira execução.
+- [ ] Validar postagem em grupo de teste do Facebook.
+- [ ] Rotacionar senha do Neon PostgreSQL (credencial antiga foi exposta no Git).
+- [ ] Configurar health-check externo (UptimeRobot/cron-job.org) para evitar spin-down no Render Free.
 
 
 

@@ -2,12 +2,14 @@ import pg from 'pg';
 const { Pool } = pg;
 
 let pool: pg.Pool | null = null;
+let dbConnectionFailed = false;
 
 /**
  * Retorna a instância do pool do PostgreSQL se DATABASE_URL estiver configurada.
  */
 export function getDbPool(): pg.Pool | null {
-  const dbUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_0SIXLDvOk3tl@ep-sparkling-silence-ac0kw825-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require';
+  if (dbConnectionFailed) return null;
+  const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl || !dbUrl.startsWith('postgres')) {
     return null;
   }
@@ -76,7 +78,12 @@ export async function initDb(): Promise<boolean> {
       client.release();
     }
   } catch (error) {
-    console.error('⚠️ Erro ao inicializar tabelas no Neon PostgreSQL:', error);
+    console.error('⚠️ Erro ao inicializar tabelas no Neon PostgreSQL (banco desativado/não configurado):', (error as Error)?.message || error);
+    dbConnectionFailed = true;
+    if (pool) {
+      pool.end().catch(() => {});
+      pool = null;
+    }
     return false;
   }
 }
