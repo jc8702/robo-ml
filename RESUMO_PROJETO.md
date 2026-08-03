@@ -4,9 +4,10 @@
 - **Status Atual:** Teste de integração E2E implementado e validado com sucesso (Scraping, WhatsApp e Facebook)
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
-- **Última Atualização:** 03/08/2026 - 20:16
+- **Última Atualização:** 03/08/2026 - 20:19
 
 ## Histórico de Alterações
+- **03/08/2026 - 20:19:** Corrigido o script de build em `package.json` (`tsc && cpSync('public', 'dist/public')`) e adicionada a resolução dinâmica de `PUBLIC_DIR` em `src/server.ts` (`dist/public`, `./public`, `../public`). Isso garante que a Render sirva a nova interface redesenhada imediatamente sem depender de cache estático. Commit `b45f979` enviado.
 - **03/08/2026 - 20:16:** Efetuado o commit e push para o repositório remoto `https://github.com/jc8702/robo-ml.git` (branch `main`, commit `3f3efa1`), disparando o build e auto-deploy automático na plataforma Render Cloud.
 - **03/08/2026 - 20:05:** Redesenho completo da interface do Painel Web (`public/index.html` e `src/server.ts`). Implementado visual de alta fidelidade com abas organizadas, sistema de notificações Toast, árvore de categorias interativa, formulários sincronizados via API REST com o Neon PostgreSQL, galeria visual de ofertas enviadas e console de atividades em tempo real.
 - **03/08/2026 - 19:58:** Re-arquitetado o módulo do WhatsApp utilizando **Playwright Chrome Nascido (`src/whatsapp/wa-playwright.ts`)** com perfil persistente em `.wa-profile/`. A sessão roda no navegador real WhatsApp Web, permitindo login por QR Code ou clique em "Vincular por número", com imunidade 100% total a quedas de protocolo Baileys (401 / 440 / 515).
