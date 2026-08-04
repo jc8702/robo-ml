@@ -4,7 +4,15 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 04/08/2026 - 16:23
+- **Última Atualização:** 04/08/2026 - 18:26
+
+- **04/08/2026 - 18:26:** **🚀 DEPLOY COMPLETO DO PROJETO NO GITHUB, NEON DB, RENDER E VERCEL:**
+  - **Higienização do Repositório (`.gitignore`)**: Adicionadas regras para excluir imagens temporárias (`*.png`), sessões de navegador (`.wa-auth`, `.ig-profile`, `.fb-profile`, `.chrome-profile`), `.env` e pastas temporárias `scratch/` e `.kombai/`.
+  - **Build de Produção Limpo**: Compilação TypeScript (`npx tsc`) e cópia dos estáticos para `dist/public` executadas com 100% de sucesso.
+  - **Sincronização com GitHub (`jc8702/robo-ml`)**: Efetuado commit (`feat: deploy completo...`) e `git push origin main` com sucesso.
+  - **Banco de Dados Neon PostgreSQL**: Estrutura de tabelas (`sent_history`, `price_history`, `app_settings`) sincronizada e pronta para consumo serverless.
+  - **Render Cloud**: Configurado `render.yaml` com gatilho de auto-deploy a partir da branch `main` do GitHub para o container Docker.
+  - **Vercel**: Configuração de rotas de proxy em `vercel.json` encaminhando requisições da interface para a API em nuvem no Render.
 
 - **04/08/2026 - 16:25:** **📱 CRIAÇÃO DE BIO DO INSTAGRAM (LIMITE ESTRITO DE 150 CARACTERES):**
   - Otimizadas 3 opções de Bio para o limite de 150 caracteres do Instagram (com contagem exata de UTF-16/emojis e chamada "QUERO").
