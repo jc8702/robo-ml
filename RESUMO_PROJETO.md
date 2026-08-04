@@ -4,9 +4,10 @@
 - **Status Atual:** Teste de integração E2E implementado e validado com sucesso (Scraping, WhatsApp e Facebook)
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
-- **Última Atualização:** 03/08/2026 - 20:19
+- **Última Atualização:** 03/08/2026 - 21:32
 
 ## Histórico de Alterações
+- **03/08/2026 - 21:32:** Adicionado suporte a salvamento e restauração automática de cookies de sessão do Facebook no Neon PostgreSQL (`FB_COOKIES_JSON`), e criado o script `npm run fb:connect` (`src/fb-connect.ts`). Reformulada a função `sendOfferWithPhoto` (`src/whatsapp/client.ts`) com fallback em 3 níveis (Baileys Ativo ➔ Playwright Web ➔ Baileys Init) garantindo que o disparo no WhatsApp e no Facebook funcione tanto em servidores serverless/Render quanto no ambiente local. Commit `a6f497e` enviado.
 - **03/08/2026 - 20:19:** Corrigido o script de build em `package.json` (`tsc && cpSync('public', 'dist/public')`) e adicionada a resolução dinâmica de `PUBLIC_DIR` em `src/server.ts` (`dist/public`, `./public`, `../public`). Isso garante que a Render sirva a nova interface redesenhada imediatamente sem depender de cache estático. Commit `b45f979` enviado.
 - **03/08/2026 - 20:16:** Efetuado o commit e push para o repositório remoto `https://github.com/jc8702/robo-ml.git` (branch `main`, commit `3f3efa1`), disparando o build e auto-deploy automático na plataforma Render Cloud.
 - **03/08/2026 - 20:05:** Redesenho completo da interface do Painel Web (`public/index.html` e `src/server.ts`). Implementado visual de alta fidelidade com abas organizadas, sistema de notificações Toast, árvore de categorias interativa, formulários sincronizados via API REST com o Neon PostgreSQL, galeria visual de ofertas enviadas e console de atividades em tempo real.
