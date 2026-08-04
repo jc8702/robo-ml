@@ -15,6 +15,7 @@
     "wa:connect": "tsx src/wa-connect.ts",
     "wa:reset": "tsx src/wa-reset.ts",
     "fb:connect": "tsx src/fb-connect.ts",
+    "ig:connect": "tsx src/ig-connect.ts",
     "dev": "tsx watch src/index.ts"
   },
   "keywords": [
