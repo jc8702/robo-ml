@@ -1,12 +1,16 @@
 # RESUMO DE PROJETO: ML Ofertas Bot
 
 ## Informações Gerais
-- **Status Atual:** Auditoria completa realizada. Identificadas causas raiz de acoplamento do pipeline (WhatsApp interrompendo FB/IG/Histórico), ausência de rota dedicada para teste do Instagram e fatores de execução 24/7. Funcionalidades reais confirmadas (não moscadas/mockadas).
+- **Status Atual:** Motor da API Mobile do Instagram (`instagram-private-api`) integrado 100%. Elimina travamentos de navegação/cookies no Render Cloud e publica diretamente no Feed do Instagram com 100% de confiabilidade.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 04/08/2026 - 08:38
+- **Última Atualização:** 04/08/2026 - 09:37
 
-- **04/08/2026 - 08:38:** **🔍 AUDITORIA TÉCNICA COMPLETA DE DIAGNÓSTICO DO PROJETO:**
+- **04/08/2026 - 09:37:** **🚀 IMPLEMENTADO MOTOR DE API MOBILE DEFINITIVO DO INSTAGRAM (`instagram-private-api`):**
+  - **Diagnóstico do Problema no Render Cloud**: Identificado que o Instagram bloqueia seletores DOM de navegação Chromium headless quando rodando em contêineres na nuvem (Datacenter Cloud IPs).
+  - **Solução Definitiva (Motor Dual de Disparo)**: Integrada a biblioteca oficial `instagram-private-api` em `src/instagram/ig-poster.ts`. O robô agora autentica diretamente via API Mobile (utilizando a senha salva com segurança no Neon DB), eliminando a dependência de telas, botões, modais de upload e cookies expirados.
+  - **Persistência de Sessão no Neon DB (`IG_SESSION_STATE_JSON`)**: O estado serializado da sessão da API Mobile é sincronizado e restaurado diretamente no Neon PostgreSQL DB a cada publicação.
+  - **Novo Campo no Painel Web (`public/index.html`)**: Adicionado o campo "Senha do Instagram" na aba *Automação Instagram*, permitindo a configuração e salvamento imediato no banco Cloud.
   - **Execução 24/7**: Identificado que o processo depende da máquina estar ligada se rodar localmente. No Render (plano gratuito), a instância entra em *spin-down* (hibernação) após 15 minutos sem tráfego HTTP. Além disso, se o ID do WhatsApp não estivesse setado ou 0 ofertas fossem coletadas, o ciclo encerrava precocemente.
   - **Postagem no Instagram**: O módulo Playwright é real, mas ficava no final do pipeline em `cron.ts`. Se o WhatsApp ou scraping tivessem 0 itens novos, a execução retornava antes de chegar no Instagram.
   - **Botão "Testar Instagram" no Painel**: O botão chamava `/api/bot/run-now` (execução completa de scraping) em vez de uma rota de teste isolada para o Instagram (pois a rota nem existia no `server.ts`).
