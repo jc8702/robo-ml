@@ -118,7 +118,7 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
           username: config.instagram.username,
           password: config.instagram.password,
         });
-        if (posted) countIg++;
+        if (posted.success) countIg++;
         await new Promise((r) => setTimeout(r, 5000));
       }
       console.log(`📸 [INSTAGRAM] Concluído: ${countIg} de ${igOffers.length} ofertas publicadas no Instagram.`);

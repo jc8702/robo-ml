@@ -1485,15 +1485,26 @@
     const btnTestIg = document.getElementById('btnTestIg');
     if (btnTestIg) {
       btnTestIg.addEventListener('click', async () => {
-        log('📸 Disparando teste isolado de postagem no Instagram...');
+        log('📸 Salvando e disparando teste no Instagram...');
         btnTestIg.disabled = true;
         btnTestIg.textContent = '⏳ Publicando no Instagram...';
         try {
-          const res = await fetch('/api/bot/test-instagram', { method: 'POST' });
+          await saveAllConfig();
+          const payload = {
+            username: document.getElementById('igUsername').value.trim(),
+            password: document.getElementById('igPassword').value.trim(),
+            bioLink: document.getElementById('igBioLink').value.trim(),
+            hashtags: document.getElementById('igCustomHashtags').value.trim(),
+          };
+          const res = await fetch('/api/bot/test-instagram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
           const data = await res.json();
           log(data.message);
           showToast(data.message, data.success ? 'success' : 'error');
-        } catch {
+        } catch (err) {
           showToast('Erro de conexão ao disparar teste no Instagram', 'error');
         } finally {
           btnTestIg.disabled = false;

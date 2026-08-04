@@ -159,14 +159,14 @@ export async function postViaPrivateApi(
   captionText: string,
   username: string,
   password?: string
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
   const dbSettings = await dbGetSettings().catch(() => ({} as Record<string, string>));
   const pwd = password || process.env.INSTAGRAM_PASSWORD || dbSettings.INSTAGRAM_PASSWORD;
   const user = username || process.env.INSTAGRAM_USERNAME || dbSettings.INSTAGRAM_USERNAME || 'clickmarido';
 
   if (!pwd) {
     console.log('[IG API] ⚠️ INSTAGRAM_PASSWORD não informada. Preencha a senha no Painel Web (Automação Instagram).');
-    return false;
+    return { success: false, error: 'Senha do Instagram não informada' };
   }
 
   const ig = new IgApiClient();
@@ -204,10 +204,11 @@ export async function postViaPrivateApi(
     });
 
     console.log(`[IG API] ✅ Post publicado com sucesso no Instagram! ID da Mídia: ${publishResult.media.id}`);
-    return true;
+    return { success: true };
   } catch (err: any) {
-    console.error('[IG API] ❌ Erro na publicação via API Mobile:', err?.message || err);
-    return false;
+    const errMsg = err?.message || String(err);
+    console.error('[IG API] ❌ Erro na publicação via API Mobile:', errMsg);
+    return { success: false, error: errMsg };
   }
 }
 
@@ -217,9 +218,10 @@ export async function postViaPrivateApi(
 export async function postOfferToInstagram(
   offer: AffiliateOffer,
   options?: { bioLink?: string; hashtags?: string; username?: string; password?: string }
-): Promise<boolean> {
+): Promise<{ success: boolean; error?: string }> {
   console.log(`\n📸 [INSTAGRAM] Iniciando postagem da oferta: "${offer.title.slice(0, 40)}..."`);
   let localImagePath: string | null = null;
+  let apiError = '';
 
   try {
     // 1. Baixa a foto do produto em HD
@@ -229,7 +231,7 @@ export async function postOfferToInstagram(
 
     if (!localImagePath || !existsSync(localImagePath)) {
       console.log('  ⚠️ Não foi possível obter imagem em HD para o Instagram. Pulando postagem.');
-      return false;
+      return { success: false, error: 'Imagem em HD indisponível' };
     }
 
     const captionText = formatInstagramCaption(offer, options?.bioLink, options?.hashtags);
@@ -240,11 +242,12 @@ export async function postOfferToInstagram(
     // TENTA PRIMEIRO VIA API MOBILE OFICIAL (Mais rápido, 100% confiável no Render Cloud)
     if (password) {
       console.log('  ⚡ Tentando envio direto via API do Instagram...');
-      const apiSuccess = await postViaPrivateApi(localImagePath, captionText, username, password);
-      if (apiSuccess) {
-        return true;
+      const apiResult = await postViaPrivateApi(localImagePath, captionText, username, password);
+      if (apiResult.success) {
+        return { success: true };
       }
-      console.log('  ⚠️ Envio via API falhou. Tentando fallback via navegador Playwright...');
+      apiError = apiResult.error || 'Falha na API Mobile';
+      console.log(`  ⚠️ Envio via API falhou (${apiError}). Tentando fallback via navegador Playwright...`);
     }
 
     const context = await openInstagramBrowser();
@@ -295,7 +298,7 @@ export async function postOfferToInstagram(
         await randomDelay(3000, 5000);
       } catch {
         console.log('  ⏰ Tempo esgotado para login no Instagram. Pulando postagem.');
-        return false;
+        return { success: false, error: 'Sessão do Instagram não está logada no navegador' };
       }
     }
 
@@ -374,7 +377,7 @@ export async function postOfferToInstagram(
     if (!modalOpened) {
       await page.screenshot({ path: 'ig-debug.png', fullPage: true }).catch(() => {});
       console.log('  ⚠️ Não foi possível abrir o modal de criação no Instagram. Screenshot ig-debug.png salvo.');
-      return false;
+      return { success: false, error: apiError || 'Não foi possível abrir modal de criação' };
     }
 
     await randomDelay(2000, 3500);
@@ -418,7 +421,7 @@ export async function postOfferToInstagram(
     if (!uploaded) {
       await page.screenshot({ path: 'ig-debug-upload.png' }).catch(() => {});
       console.log('  ⚠️ Não foi possível carregar a imagem no Instagram. Screenshot ig-debug-upload.png salvo.');
-      return false;
+      return { success: false, error: apiError || 'Não foi possível carregar a imagem' };
     }
 
     await randomDelay(3000, 5000);
@@ -535,16 +538,17 @@ export async function postOfferToInstagram(
     if (!shared) {
       await page.screenshot({ path: 'ig-debug-share.png' }).catch(() => {});
       console.log('  ❌ Botão Compartilhar não localizado. Screenshot ig-debug-share.png salvo.');
-      return false;
+      return { success: false, error: apiError || 'Botão Compartilhar não localizado' };
     }
 
     await randomDelay(8000, 12000);
     console.log('  ✅ Oferta publicada com sucesso no Instagram!');
     await saveIgCookiesToDb(context).catch(() => {});
 
-    return true;
-  } catch (err) {
-    console.error(`  ❌ Erro ao postar oferta no Instagram: ${err}`);
-    return false;
+    return { success: true };
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    console.error(`  ❌ Erro ao postar oferta no Instagram: ${errMsg}`);
+    return { success: false, error: apiError || errMsg };
   }
 }

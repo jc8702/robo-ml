@@ -342,8 +342,14 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
   // POST /api/bot/test-instagram (ou /api/instagram/test)
   if (method === 'POST' && (url === '/api/bot/test-instagram' || url === '/api/instagram/test' || url.endsWith('/test-instagram'))) {
     try {
+      const body = await parseJsonBody(req).catch(() => ({}));
       const config = await loadConfigAsync();
       const { postOfferToInstagram } = await import('./instagram/ig-poster.js');
+
+      const username = (body.username || config.instagram.username || process.env.INSTAGRAM_USERNAME || '').trim();
+      const password = (body.password || config.instagram.password || process.env.INSTAGRAM_PASSWORD || '').trim();
+      const bioLink = (body.bioLink || config.instagram.bioLink || '').trim();
+      const hashtags = (body.hashtags || config.instagram.customHashtags || '').trim();
 
       const history = await getSentOffersHistoryFromDb();
       const testOffer: any = history.length > 0 ? {
@@ -374,22 +380,19 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
         soldQuantity: 100
       };
 
-      console.log('[SERVER] 📸 Disparando teste isolado de postagem no Instagram...');
-      const success = await postOfferToInstagram(testOffer, {
-        bioLink: config.instagram.bioLink,
-        hashtags: config.instagram.customHashtags,
-        username: config.instagram.username,
-        password: config.instagram.password,
+      console.log(`[SERVER] 📸 Disparando teste isolado de postagem no Instagram para @${username}...`);
+      const result = await postOfferToInstagram(testOffer, {
+        bioLink,
+        hashtags,
+        username,
+        password,
       });
 
-      if (success) {
+      if (result.success) {
         return sendJson({ success: true, message: '✅ Postagem enviada e publicada com sucesso no perfil do Instagram!' });
       } else {
-        const hasPwd = !!(config.instagram.password || process.env.INSTAGRAM_PASSWORD);
-        const errMsg = hasPwd
-          ? '❌ Falha ao publicar no Instagram via API/Browser. Verifique se o usuário e a senha do Instagram estão corretos e sem 2FA no painel.'
-          : '❌ Senha do Instagram não configurada! Preencha a senha no campo "Senha do Instagram" na aba Automação Instagram e clique em Salvar.';
-        return sendJson({ success: false, message: errMsg }, 400);
+        const detail = result.error ? ` Detalhes: ${result.error}` : '';
+        return sendJson({ success: false, message: `❌ Falha ao publicar no Instagram.${detail}` }, 400);
       }
     } catch (err) {
       console.error('[SERVER] Erro ao testar Instagram:', err);
