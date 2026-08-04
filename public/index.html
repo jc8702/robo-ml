@@ -892,7 +892,12 @@
         <div class="form-grid" style="margin-bottom: 1.5rem;">
           <div class="field">
             <label for="igUsername">Nome de Usuário / Email do Instagram:</label>
-            <input type="text" id="igUsername" placeholder="@seu.perfil.ofertas ou email@exemplo.com">
+            <input type="text" id="igUsername" placeholder="clickmarido ou email@exemplo.com">
+          </div>
+
+          <div class="field">
+            <label for="igPassword">Senha do Instagram (Para Automação Direta na Nuvem):</label>
+            <input type="password" id="igPassword" placeholder="••••••••">
           </div>
 
           <div class="field">
@@ -1361,6 +1366,7 @@
           // Instagram
           if (data.igEnabled !== undefined) document.getElementById('igEnabled').checked = !!data.igEnabled;
           if (data.igUsername) document.getElementById('igUsername').value = data.igUsername;
+          if (data.igPassword) document.getElementById('igPassword').value = data.igPassword;
           if (data.igMaxPostsPerCycle !== undefined) document.getElementById('igMaxPostsPerCycle').value = data.igMaxPostsPerCycle;
           if (data.igBioLink) document.getElementById('igBioLink').value = data.igBioLink;
           if (data.igCustomHashtags) document.getElementById('igCustomHashtags').value = data.igCustomHashtags;
@@ -1393,6 +1399,7 @@
         fbAutoJoin: document.getElementById('fbAutoJoin').checked,
         igEnabled: document.getElementById('igEnabled').checked,
         igUsername: document.getElementById('igUsername').value.trim(),
+        igPassword: document.getElementById('igPassword').value.trim(),
         igMaxPostsPerCycle: parseInt(document.getElementById('igMaxPostsPerCycle').value, 10) || 3,
         igBioLink: document.getElementById('igBioLink').value.trim(),
         igCustomHashtags: document.getElementById('igCustomHashtags').value.trim(),

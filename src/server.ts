@@ -240,6 +240,7 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       fbAutoJoin: config.facebook.autoJoin,
       igEnabled: config.instagram.enabled,
       igUsername: config.instagram.username,
+      igPassword: dbSettings.INSTAGRAM_PASSWORD || process.env.INSTAGRAM_PASSWORD || '',
       igMaxPostsPerCycle: config.instagram.maxPostsPerCycle,
       igBioLink: config.instagram.bioLink,
       igCustomHashtags: config.instagram.customHashtags,
@@ -272,6 +273,7 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       // Instagram
       if (body.igEnabled !== undefined) updates.INSTAGRAM_ENABLED = body.igEnabled ? 'true' : 'false';
       if (typeof body.igUsername === 'string') updates.INSTAGRAM_USERNAME = body.igUsername.trim();
+      if (typeof body.igPassword === 'string') updates.INSTAGRAM_PASSWORD = body.igPassword.trim();
       if (body.igMaxPostsPerCycle !== undefined && body.igMaxPostsPerCycle !== '') updates.INSTAGRAM_MAX_POSTS_PER_CYCLE = String(body.igMaxPostsPerCycle);
       if (typeof body.igBioLink === 'string') updates.INSTAGRAM_BIO_LINK = body.igBioLink.trim();
       if (typeof body.igCustomHashtags === 'string') updates.INSTAGRAM_HASHTAGS = body.igCustomHashtags.trim();

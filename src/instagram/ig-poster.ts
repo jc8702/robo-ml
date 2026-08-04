@@ -1,6 +1,6 @@
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { resolve, join } from 'node:path';
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, unlinkSync, writeFileSync, readFileSync } from 'node:fs';
 import type { AffiliateOffer } from '../affiliate/link-converter.js';
 import { formatInstagramCaption } from '../formatter/instagram.js';
 import { findBrowserPath, isCloudEnvironment } from '../config/browser.js';
@@ -151,12 +151,72 @@ async function downloadOfferImage(imageUrl: string): Promise<string | null> {
   }
 }
 
+import { IgApiClient } from 'instagram-private-api';
+import { dbGetSettings, dbSaveMultipleSettings } from '../db/index.js';
+
+export async function postViaPrivateApi(
+  imagePath: string,
+  captionText: string,
+  username: string,
+  password?: string
+): Promise<boolean> {
+  const dbSettings = await dbGetSettings().catch(() => ({} as Record<string, string>));
+  const pwd = password || process.env.INSTAGRAM_PASSWORD || dbSettings.INSTAGRAM_PASSWORD;
+  const user = username || process.env.INSTAGRAM_USERNAME || dbSettings.INSTAGRAM_USERNAME || 'clickmarido';
+
+  if (!pwd) {
+    console.log('[IG API] ⚠️ INSTAGRAM_PASSWORD não informada. Preencha a senha no Painel Web (Automação Instagram).');
+    return false;
+  }
+
+  const ig = new IgApiClient();
+  ig.state.generateDevice(user);
+
+  // Restaura estado de sessão anterior salvo no Neon DB
+  if (dbSettings.IG_SESSION_STATE_JSON) {
+    try {
+      await ig.state.deserialize(dbSettings.IG_SESSION_STATE_JSON);
+      console.log('[IG API] 🔑 Sessão do Instagram restaurada do Neon PostgreSQL.');
+    } catch {
+      /* recria sessão em caso de expiração */
+    }
+  }
+
+  // Listener para salvar automaticamente o estado da sessão no banco
+  ig.request.end$.subscribe(async () => {
+    try {
+      const serialized = await ig.state.serialize();
+      delete serialized.constants;
+      await dbSaveMultipleSettings({ IG_SESSION_STATE_JSON: JSON.stringify(serialized) });
+    } catch {}
+  });
+
+  try {
+    console.log(`[IG API] 📲 Autenticando conta @${user} na API do Instagram...`);
+    await ig.account.login(user, pwd);
+
+    console.log('[IG API] 📤 Enviando foto HD e legenda para o Feed do Instagram...');
+    const fileBuffer = readFileSync(imagePath);
+
+    const publishResult = await ig.publish.photo({
+      file: fileBuffer,
+      caption: captionText,
+    });
+
+    console.log(`[IG API] ✅ Post publicado com sucesso no Instagram! ID da Mídia: ${publishResult.media.id}`);
+    return true;
+  } catch (err: any) {
+    console.error('[IG API] ❌ Erro na publicação via API Mobile:', err?.message || err);
+    return false;
+  }
+}
+
 /**
  * Publica uma oferta no Instagram (Feed / Post com Foto)
  */
 export async function postOfferToInstagram(
   offer: AffiliateOffer,
-  options?: { bioLink?: string; hashtags?: string }
+  options?: { bioLink?: string; hashtags?: string; username?: string; password?: string }
 ): Promise<boolean> {
   console.log(`\n📸 [INSTAGRAM] Iniciando postagem da oferta: "${offer.title.slice(0, 40)}..."`);
   let localImagePath: string | null = null;
@@ -170,6 +230,21 @@ export async function postOfferToInstagram(
     if (!localImagePath || !existsSync(localImagePath)) {
       console.log('  ⚠️ Não foi possível obter imagem em HD para o Instagram. Pulando postagem.');
       return false;
+    }
+
+    const captionText = formatInstagramCaption(offer, options?.bioLink, options?.hashtags);
+    const dbSettings = await dbGetSettings().catch(() => ({} as Record<string, string>));
+    const username = options?.username || process.env.INSTAGRAM_USERNAME || dbSettings.INSTAGRAM_USERNAME || 'clickmarido';
+    const password = options?.password || process.env.INSTAGRAM_PASSWORD || dbSettings.INSTAGRAM_PASSWORD;
+
+    // TENTA PRIMEIRO VIA API MOBILE OFICIAL (Mais rápido, 100% confiável no Render Cloud)
+    if (password) {
+      console.log('  ⚡ Tentando envio direto via API do Instagram...');
+      const apiSuccess = await postViaPrivateApi(localImagePath, captionText, username, password);
+      if (apiSuccess) {
+        return true;
+      }
+      console.log('  ⚠️ Envio via API falhou. Tentando fallback via navegador Playwright...');
     }
 
     const context = await openInstagramBrowser();
@@ -380,7 +455,6 @@ export async function postOfferToInstagram(
 
     // 7. Escreve a legenda persuasiva de alto engajamento
     console.log('  ✍️ Digitando legenda formatada...');
-    const captionText = formatInstagramCaption(offer, options?.bioLink, options?.hashtags);
 
     // Tenta vários seletores para a caixa de legenda
     let captionFound = false;
