@@ -16,3 +16,5 @@ test-*.jpg
 wa-qr-screenshot.png
 temp_offer_*.jpg
 clear-wa-session.mjs
+.ig-profile/
+.ig-temp-images/

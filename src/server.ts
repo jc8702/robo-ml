@@ -378,12 +378,18 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       const success = await postOfferToInstagram(testOffer, {
         bioLink: config.instagram.bioLink,
         hashtags: config.instagram.customHashtags,
+        username: config.instagram.username,
+        password: config.instagram.password,
       });
 
       if (success) {
-        return sendJson({ success: true, message: '✅ Postagem de teste enviada e publicada com sucesso no Instagram!' });
+        return sendJson({ success: true, message: '✅ Postagem enviada e publicada com sucesso no perfil do Instagram!' });
       } else {
-        return sendJson({ success: false, message: '❌ Não foi possível concluir a postagem no Instagram. Verifique se o perfil em .ig-profile/ está logado no Instagram.' }, 400);
+        const hasPwd = !!(config.instagram.password || process.env.INSTAGRAM_PASSWORD);
+        const errMsg = hasPwd
+          ? '❌ Falha ao publicar no Instagram via API/Browser. Verifique se o usuário e a senha do Instagram estão corretos e sem 2FA no painel.'
+          : '❌ Senha do Instagram não configurada! Preencha a senha no campo "Senha do Instagram" na aba Automação Instagram e clique em Salvar.';
+        return sendJson({ success: false, message: errMsg }, 400);
       }
     } catch (err) {
       console.error('[SERVER] Erro ao testar Instagram:', err);

@@ -115,6 +115,8 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
         const posted = await postOfferToInstagram(offer, {
           bioLink: config.instagram.bioLink,
           hashtags: config.instagram.customHashtags,
+          username: config.instagram.username,
+          password: config.instagram.password,
         });
         if (posted) countIg++;
         await new Promise((r) => setTimeout(r, 5000));

@@ -44,6 +44,7 @@ export interface FacebookConfig {
 export interface InstagramConfig {
   enabled: boolean;
   username: string;
+  password?: string;
   maxPostsPerCycle: number;
   bioLink: string;
   customHashtags: string;
@@ -123,6 +124,7 @@ export function loadConfig(): AppConfig {
     instagram: {
       enabled: process.env.INSTAGRAM_ENABLED === 'true',
       username: process.env.INSTAGRAM_USERNAME || '',
+      password: process.env.INSTAGRAM_PASSWORD || '',
       maxPostsPerCycle: Number(process.env.INSTAGRAM_MAX_POSTS_PER_CYCLE ?? 3),
       bioLink: process.env.INSTAGRAM_BIO_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
       customHashtags: process.env.INSTAGRAM_HASHTAGS || '#achadinhos #ofertas #mercadolivre #desconto',
@@ -180,6 +182,7 @@ export async function loadConfigAsync(): Promise<AppConfig> {
     instagram: {
       enabled: dbSettings.INSTAGRAM_ENABLED ? dbSettings.INSTAGRAM_ENABLED === 'true' : process.env.INSTAGRAM_ENABLED === 'true',
       username: dbSettings.INSTAGRAM_USERNAME || process.env.INSTAGRAM_USERNAME || '',
+      password: dbSettings.INSTAGRAM_PASSWORD || process.env.INSTAGRAM_PASSWORD || '',
       maxPostsPerCycle: Number(dbSettings.INSTAGRAM_MAX_POSTS_PER_CYCLE || process.env.INSTAGRAM_MAX_POSTS_PER_CYCLE || 3),
       bioLink: dbSettings.INSTAGRAM_BIO_LINK || process.env.INSTAGRAM_BIO_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
       customHashtags: dbSettings.INSTAGRAM_HASHTAGS || process.env.INSTAGRAM_HASHTAGS || '#achadinhos #ofertas #mercadolivre #desconto',
