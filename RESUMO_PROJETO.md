@@ -6,6 +6,9 @@
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
 - **Última Atualização:** 04/08/2026 - 01:19
 
+- **04/08/2026 - 03:35:** **Isolamento de Comentários nos Posts do Facebook (`src/facebook/fb-poster.ts`):**
+  - Corrigido o seletor do campo de comentários para filtrar estritamente o elemento do post recém-publicado (`targetArticle.filter({ hasText: titleSnippet })`).
+  - Prevenida a inserção acidental de comentários em posts fixados/anúncios de terceiros no topo do feed. Caso o post não seja isolado com 100% de precisão, o comentário é suprimido com segurança sem afetar a publicação da foto.
 - **04/08/2026 - 03:08:** **Sincronização de Sessão do WhatsApp Web no Agendador (`src/scheduler/cron.ts` e `src/whatsapp/client.ts`):**
   - Corrigida a inicialização do agendador autônomo para detectar automaticamente a presença da sessão pareada em `.wa-profile/`.
   - Suprimida a geração de códigos de pareamento e sockets Baileys redundantes quando a sessão do WhatsApp Web (Chrome/Playwright) estiver pareada em `.wa-profile/`.

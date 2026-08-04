@@ -299,30 +299,28 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
   if (method === 'POST' && (url === '/api/bot/start' || url.endsWith('/start'))) {
     if (!isBotRunning) {
       isBotRunning = true;
-      const config = loadConfig();
-      startScheduler(config).catch((err) => console.error('Erro ao iniciar agendador:', err));
+      const config = await loadConfigAsync();
+      await startScheduler(config).catch((err) => console.error('Erro ao iniciar agendador:', err));
     }
-    return sendJson({ isRunning: true, message: 'Automacao iniciada com sucesso!' });
+    return sendJson({ isRunning: true, message: '⚡ Automação iniciada com sucesso! O robô executará nos horários agendados.' });
   }
 
   // POST /api/bot/stop
   if (method === 'POST' && (url === '/api/bot/stop' || url.endsWith('/stop'))) {
     isBotRunning = false;
     stopScheduler();
-    return sendJson({ isRunning: false, message: 'Automacao pausada e agendador cancelado.' });
+    return sendJson({ isRunning: false, message: '⏸️ Automação pausada e agendador cancelado.' });
   }
 
   // POST /api/bot/run-now
   if (method === 'POST' && (url === '/api/bot/run-now' || url.endsWith('/run-now'))) {
     try {
-      const config = loadConfig();
-      runAutomaticCycle(config)
-        .then(() => {})
-        .catch((err) => console.error('Erro na execucao manual:', err));
-
-      return sendJson({ success: true, message: 'Busca executada! Verifique seu grupo do WhatsApp.' });
+      const config = await loadConfigAsync();
+      await runAutomaticCycle(config);
+      return sendJson({ success: true, message: '⚡ Varredura executada com sucesso! Ofertas enviadas para o WhatsApp e Facebook.' });
     } catch (err) {
-      return sendJson({ success: false, message: 'Erro na execucao: ' + String(err) }, 500);
+      console.error('[SERVER] Erro na execução manual:', err);
+      return sendJson({ success: false, message: 'Erro na execução da varredura: ' + String(err) }, 500);
     }
   }
 

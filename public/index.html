@@ -1420,34 +1420,38 @@
 
     btnToggleBot.addEventListener('click', async () => {
       const endpoint = isRunning ? '/api/bot/stop' : '/api/bot/start';
+      btnToggleBot.disabled = true;
       try {
         const res = await fetch(endpoint, { method: 'POST' });
         const data = await res.json();
         updateStatus(!!data.isRunning);
         log(data.message);
-        showToast(data.message, isRunning ? 'success' : 'warning');
+        showToast(data.message, data.isRunning ? 'success' : 'warning');
       } catch {
         showToast('Erro ao alterar status da automação', 'error');
+      } finally {
+        btnToggleBot.disabled = false;
       }
     });
 
     btnRunNow.addEventListener('click', async () => {
       log('⚡ Ciclo de varredura imediata solicitado ao servidor...');
       btnRunNow.disabled = true;
-      btnRunNow.textContent = '⏳ Executando...';
+      btnRunNow.innerHTML = '⏳ Varrendo Mercado Livre & Postando...';
 
       try {
         const res = await fetch('/api/bot/run-now', { method: 'POST' });
         const data = await res.json();
         log(data.message);
         showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) {
+          await loadHistory();
+        }
       } catch (err) {
         showToast('Erro ao disparar varredura', 'error');
       } finally {
-        setTimeout(() => {
-          btnRunNow.disabled = false;
-          btnRunNow.textContent = '⚡ Enviar Ofertas Agora';
-        }, 3000);
+        btnRunNow.disabled = false;
+        btnRunNow.innerHTML = '⚡ Enviar Ofertas Agora';
       }
     });
 
