@@ -6,6 +6,10 @@
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
 - **Última Atualização:** 04/08/2026 - 01:19
 
+- **04/08/2026 - 03:53:** **Implementação Completa do Módulo de Automação do Instagram (`src/instagram/ig-poster.ts` e `public/index.html`):**
+  - **Aba Dedicada "📸 Automação Instagram"**: Adicionada no Painel Web com alternador de ativação, campos para Username/Email, Limite de Posts por Ciclo, Link da Bio / Grupo VIP e Bloco de Hashtags Personalizadas salvas no Neon PostgreSQL.
+  - **Copywriter de Alto Engajamento Orgânico (`src/formatter/instagram.ts`)**: Estruturado com ganchos visuais para os primeiros 3 segundos, destaque de descontos, instrução de CTA em 2 passos (*"Comente OFERTA ou clique no Link da Bio"*) e conjunto estratégico de hashtags do algoritmo da Meta.
+  - **Motor Playwright de Perfil Persistente (`.ig-profile/`)**: Implementado envio com upload automático de imagem HD e legenda no Instagram Web. Criados os utilitários `src/ig-connect.ts` e `Conectar-Instagram.bat` para pareamento visual em 1 clique.
 - **04/08/2026 - 03:44:** **Persistência Total ao Recarregar a Página (`src/server.ts`):**
   - Implementada a normalização estrita de URLs no servidor HTTP (`req.url.split('?')[0]`). Isso corrige a rota `/api/config` para não falhar com 404 quando o navegador envia parâmetros de query anti-cache ou barras no final.
   - Todos os campos da aba **Filtros & Agendamento** (Preço Mínimo, Preço Máximo, Desconto Mínimo, Máximo de Ofertas, Cron, TAG de Afiliado e Grupos do WhatsApp) agora permanecem 100% preenchidos ao atualizar/F5 a página.
