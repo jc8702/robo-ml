@@ -4,9 +4,12 @@
 - **Status Atual:** Motor da API Mobile do Instagram (`instagram-private-api`) integrado 100%. Elimina travamentos de navegação/cookies no Render Cloud e publica diretamente no Feed do Instagram com 100% de confiabilidade.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 04/08/2026 - 10:11
+- **Última Atualização:** 04/08/2026 - 10:25
 
-- **04/08/2026 - 10:11:** **🔧 ENVIO AUTOMÁTICO DE PAYLOAD NO BOTÃO "TESTAR INSTAGRAM" & DIAGNÓSTICO RETORNADO (Commit `7b8c291`):**
+- **04/08/2026 - 10:25:** **🟢 SINCRONIZADA SESSÃO DO WHATSAPP NO NEON DB CLOUD (`WA_AUTH_creds.json`):**
+  - **Diagnóstico da Pausa de Envio**: As credenciais locais do WhatsApp (`.wa-auth/creds.json`) não haviam sido enviadas para o banco em nuvem Neon DB. Com isso, a instância do Render Cloud operava sem sessão do WhatsApp vinculada.
+  - **Sincronização Cloud Concluída**: Efetuado o upload da credencial mestre diretamente para a tabela `app_settings` do Neon PostgreSQL.
+  - **Grupo Alvo Confirmado**: Vinculado ao grupo `GC 19 GRUPO VIP SO MERCADO LIVRE` (`120363428727908129@g.us`). As postagens no WhatsApp do Render Cloud foram reativadas.
   - **Auto-Save no Teste**: O botão "Testar Postagem Instagram" agora executa automaticamente a salvamento de configurações (`saveAllConfig`) e envia os campos de usuário e senha diretamente no corpo da requisição POST para `/api/bot/test-instagram`.
   - **Diagnóstico Exato de Erro**: O backend agora captura a exceção exata retornada pela API do Instagram (ex: senha incorreta, 2FA ativado ou desafio de segurança) e exibe o motivo detalhado diretamente no console do painel e no toast de notificação.
   - **Diagnóstico do Problema no Render Cloud**: Identificado que o Instagram bloqueia seletores DOM de navegação Chromium headless quando rodando em contêineres na nuvem (Datacenter Cloud IPs).
