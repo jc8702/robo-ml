@@ -105,6 +105,28 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
     console.log('\n[FB] Facebook habilitado mas nenhum grupo configurado. Adicione FB_GROUP_URLS no .env.');
   }
 
+  // 3. Postagem no Instagram (Feed / Posts de Alto Impacto Orgânico)
+  if (config.instagram && config.instagram.enabled) {
+    console.log('\n📸 [INSTAGRAM] Iniciando postagem automática no Instagram...');
+    try {
+      const { postOfferToInstagram } = await import('../instagram/ig-poster');
+      const maxIg = config.instagram.maxPostsPerCycle || 3;
+      const igOffers = affiliateOffers.slice(0, maxIg);
+      let countIg = 0;
+      for (const offer of igOffers) {
+        const posted = await postOfferToInstagram(offer, {
+          bioLink: config.instagram.bioLink,
+          hashtags: config.instagram.customHashtags,
+        });
+        if (posted) countIg++;
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+      console.log(`📸 [INSTAGRAM] Concluído: ${countIg} de ${igOffers.length} ofertas publicadas no Instagram.`);
+    } catch (igErr) {
+      console.error('❌ [INSTAGRAM] Erro na automação do Instagram:', igErr);
+    }
+  }
+
   console.log(`\n[CRON] Ciclo concluido! Proximo envio agendado.\n`);
 }
 

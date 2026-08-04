@@ -6,6 +6,9 @@
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
 - **Última Atualização:** 04/08/2026 - 01:19
 
+- **04/08/2026 - 03:44:** **Persistência Total ao Recarregar a Página (`src/server.ts`):**
+  - Implementada a normalização estrita de URLs no servidor HTTP (`req.url.split('?')[0]`). Isso corrige a rota `/api/config` para não falhar com 404 quando o navegador envia parâmetros de query anti-cache ou barras no final.
+  - Todos os campos da aba **Filtros & Agendamento** (Preço Mínimo, Preço Máximo, Desconto Mínimo, Máximo de Ofertas, Cron, TAG de Afiliado e Grupos do WhatsApp) agora permanecem 100% preenchidos ao atualizar/F5 a página.
 - **04/08/2026 - 03:39:** **Correção dos Botões de Ação na Barra Superior (`public/index.html` e `src/server.ts`):**
   - **"Enviar Ofertas Agora" (`/api/bot/run-now`)**: Corrigida a execução para carregar as configurações atualizadas do Neon DB (`loadConfigAsync()`), aguardar o disparo da varredura (`await runAutomaticCycle()`) e recarregar automaticamente a galeria visual de ofertas enviadas ao concluir.
   - **"Iniciar/Pausar Automação" (`/api/bot/start` / `/api/bot/stop`)**: Atualizados para carregar a configuração assíncrona do banco e alternar o status com feedback visual Toast e estado do botão em tempo real.

@@ -722,6 +722,7 @@
       <button class="tab-btn active" data-tab="tab-tree">🌳 Categorias & Subnichos</button>
       <button class="tab-btn" data-tab="tab-filters">⚙️ Filtros & Agendamento</button>
       <button class="tab-btn" data-tab="tab-facebook">📘 Automação Facebook</button>
+      <button class="tab-btn" data-tab="tab-instagram">📸 Automação Instagram</button>
       <button class="tab-btn" data-tab="tab-history">📸 Ofertas Enviadas</button>
     </div>
 
@@ -869,7 +870,57 @@
       </div>
     </div>
 
-    <!-- ABA 4: HISTÓRICO DE OFERTAS ENVIADAS -->
+    <!-- ABA 4: AUTOMAÇÃO INSTAGRAM -->
+    <div class="tab-pane" id="tab-instagram">
+      <div class="card">
+        <div class="card-title">
+          <span>📸 Configurações da Automação de Alto Engajamento no Instagram</span>
+          <div style="display: flex; gap: 0.6rem;">
+            <button class="btn btn-warning" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnTestIg">📸 Testar Postagem Instagram</button>
+            <button class="btn btn-primary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnSaveIgConfig">💾 Salvar Instagram</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <label class="switch-label">
+            <input type="checkbox" id="igEnabled" class="switch-input">
+            <span class="switch-slider"></span>
+            <span>Ativar Publicação Automática no Feed do Instagram</span>
+          </label>
+        </div>
+
+        <div class="form-grid" style="margin-bottom: 1.5rem;">
+          <div class="field">
+            <label for="igUsername">Nome de Usuário / Email do Instagram:</label>
+            <input type="text" id="igUsername" placeholder="@seu.perfil.ofertas ou email@exemplo.com">
+          </div>
+
+          <div class="field">
+            <label for="igMaxPostsPerCycle">Máximo de Posts por Ciclo:</label>
+            <input type="number" id="igMaxPostsPerCycle" value="3">
+          </div>
+
+          <div class="field" style="grid-column: span 2;">
+            <label for="igBioLink">Link Promocional para CTA (Mencionado na Legenda como Link da Bio):</label>
+            <input type="text" id="igBioLink" placeholder="https://chat.whatsapp.com/SeuGrupoVIP ou linktr.ee/seuPerfil">
+          </div>
+
+          <div class="field" style="grid-column: span 2;">
+            <label for="igCustomHashtags">Hashtags Personalizadas para Engajamento Orgânico (Algoritmo da Meta):</label>
+            <input type="text" id="igCustomHashtags" placeholder="#achadinhos #ofertas #mercadolivre #desconto #promocao #achadosdosdia">
+          </div>
+        </div>
+
+        <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); padding: 1rem; border-radius: 10px; font-size: 0.85rem; color: #bae6fd;">
+          💡 <strong>Como Funciona a Distribuição Orgânica no Instagram:</strong><br>
+          • As postagens usam ganchos visuais e copys otimizadas para reter a atenção do usuário no feed.<br>
+          • As legendas contêm a instrução <em>"Comente OFERTA para receber o link"</em> e direcionamento para o link da sua Bio.<br>
+          • Para autenticar a sua conta no Instagram Web, clique duas vezes no arquivo <strong>"Conectar-Instagram.bat"</strong> na raiz do seu robô e faça login visualmente 1 única vez.
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 5: HISTÓRICO DE OFERTAS ENVIADAS -->
     <div class="tab-pane" id="tab-history">
       <div class="card">
         <div class="card-title">
@@ -1307,6 +1358,13 @@
           if (data.fbWaGroupLink) document.getElementById('fbWaGroupLink').value = data.fbWaGroupLink;
           if (data.fbAutoJoin !== undefined) document.getElementById('fbAutoJoin').checked = !!data.fbAutoJoin;
 
+          // Instagram
+          if (data.igEnabled !== undefined) document.getElementById('igEnabled').checked = !!data.igEnabled;
+          if (data.igUsername) document.getElementById('igUsername').value = data.igUsername;
+          if (data.igMaxPostsPerCycle !== undefined) document.getElementById('igMaxPostsPerCycle').value = data.igMaxPostsPerCycle;
+          if (data.igBioLink) document.getElementById('igBioLink').value = data.igBioLink;
+          if (data.igCustomHashtags) document.getElementById('igCustomHashtags').value = data.igCustomHashtags;
+
           updateStatus(!!data.isRunning);
           log('✅ Configurações carregadas do banco de dados Neon PostgreSQL.');
         }
@@ -1333,6 +1391,11 @@
         fbDelayBetweenPosts: parseInt(document.getElementById('fbDelayBetweenPosts').value, 10) || 60,
         fbWaGroupLink: document.getElementById('fbWaGroupLink').value.trim(),
         fbAutoJoin: document.getElementById('fbAutoJoin').checked,
+        igEnabled: document.getElementById('igEnabled').checked,
+        igUsername: document.getElementById('igUsername').value.trim(),
+        igMaxPostsPerCycle: parseInt(document.getElementById('igMaxPostsPerCycle').value, 10) || 3,
+        igBioLink: document.getElementById('igBioLink').value.trim(),
+        igCustomHashtags: document.getElementById('igCustomHashtags').value.trim(),
       };
 
       try {
@@ -1378,27 +1441,20 @@
           const items = await res.json();
           if (Array.isArray(items) && items.length > 0) {
             offersGrid.innerHTML = '';
-            items.forEach(item => {
+            items.slice(0, 48).forEach(item => {
               const card = document.createElement('div');
               card.className = 'offer-card';
-
-              const discountHtml = item.discount ? `<div class="discount-badge">-${item.discount}%</div>` : '';
-              const imgUrl = item.thumbnail || 'https://via.placeholder.com/300?text=Sem+Imagem';
-
               card.innerHTML = `
-                <div class="offer-img-wrapper">
-                  <img src="${imgUrl}" alt="${item.title || 'Oferta'}" class="offer-img" />
-                  ${discountHtml}
-                </div>
-                <div class="offer-body">
-                  <div class="offer-title">${item.title || 'Oferta Sem Título'}</div>
+                <img src="${item.imageUrl || item.thumbnail || 'https://http2.mlstatic.com/D_NQ_NP_2X_704701-MLA45648833919_042021-F.webp'}" class="offer-img" alt="Foto da Oferta" onerror="this.src='https://http2.mlstatic.com/D_NQ_NP_2X_704701-MLA45648833919_042021-F.webp'">
+                <div class="offer-details">
+                  <div class="offer-title">${item.title || 'Oferta Mercado Livre'}</div>
                   <div class="offer-prices">
                     <span class="price-current">R$ ${item.price || '0,00'}</span>
                     ${item.originalPrice ? `<span class="price-old">R$ ${item.originalPrice}</span>` : ''}
                   </div>
                   <div class="offer-footer">
                     <span class="seller-tag">${item.seller || 'Mercado Livre'}</span>
-                    <a href="${item.link || '#'}" target="_blank" style="color: var(--accent-blue); text-decoration: none; font-weight: 700;">Ver Link ↗</a>
+                    <a href="${item.link || item.permalink || '#'}" target="_blank" style="color: var(--accent-blue); text-decoration: none; font-weight: 700;">Ver Link ↗</a>
                   </div>
                 </div>
               `;
@@ -1416,7 +1472,30 @@
     // HANDLERS DOS BOTÕES
     btnSaveConfig.addEventListener('click', saveAllConfig);
     btnSaveFbConfig.addEventListener('click', saveAllConfig);
+    document.getElementById('btnSaveIgConfig').addEventListener('click', saveAllConfig);
     btnRefreshHistory.addEventListener('click', loadHistory);
+
+    const btnTestIg = document.getElementById('btnTestIg');
+    if (btnTestIg) {
+      btnTestIg.addEventListener('click', async () => {
+        log('📸 Disparando teste de postagem no Instagram...');
+        btnTestIg.disabled = true;
+        btnTestIg.textContent = '⏳ Postando no Instagram...';
+        try {
+          const res = await fetch('/api/bot/run-now', { method: 'POST' });
+          const data = await res.json();
+          log(data.message);
+          showToast('Execução iniciada! Verifique o console do servidor.', 'success');
+        } catch {
+          showToast('Erro ao disparar teste no Instagram', 'error');
+        } finally {
+          setTimeout(() => {
+            btnTestIg.disabled = false;
+            btnTestIg.textContent = '📸 Testar Postagem Instagram';
+          }, 4000);
+        }
+      });
+    }
 
     btnToggleBot.addEventListener('click', async () => {
       const endpoint = isRunning ? '/api/bot/stop' : '/api/bot/start';

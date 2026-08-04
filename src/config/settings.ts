@@ -41,6 +41,14 @@ export interface FacebookConfig {
   autoJoin: boolean;
 }
 
+export interface InstagramConfig {
+  enabled: boolean;
+  username: string;
+  maxPostsPerCycle: number;
+  bioLink: string;
+  customHashtags: string;
+}
+
 export interface AppConfig {
   affiliate: {
     id: string;
@@ -64,6 +72,7 @@ export interface AppConfig {
     useApi: boolean;
   };
   facebook: FacebookConfig;
+  instagram: InstagramConfig;
 }
 
 function parseList(value: string | undefined): string[] {
@@ -110,6 +119,13 @@ export function loadConfig(): AppConfig {
       delayBetweenPostsSec: Number(process.env.FB_DELAY_BETWEEN_POSTS ?? 60),
       waGroupLink: process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
       autoJoin: process.env.FB_AUTO_JOIN !== 'false',
+    },
+    instagram: {
+      enabled: process.env.INSTAGRAM_ENABLED === 'true',
+      username: process.env.INSTAGRAM_USERNAME || '',
+      maxPostsPerCycle: Number(process.env.INSTAGRAM_MAX_POSTS_PER_CYCLE ?? 3),
+      bioLink: process.env.INSTAGRAM_BIO_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
+      customHashtags: process.env.INSTAGRAM_HASHTAGS || '#achadinhos #ofertas #mercadolivre #desconto',
     },
   };
 }
@@ -160,6 +176,13 @@ export async function loadConfigAsync(): Promise<AppConfig> {
       delayBetweenPostsSec: Number(dbSettings.FB_DELAY_BETWEEN_POSTS || process.env.FB_DELAY_BETWEEN_POSTS || 60),
       waGroupLink: dbSettings.FB_WA_GROUP_LINK || process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
       autoJoin: dbSettings.FB_AUTO_JOIN ? dbSettings.FB_AUTO_JOIN === 'true' : process.env.FB_AUTO_JOIN !== 'false',
+    },
+    instagram: {
+      enabled: dbSettings.INSTAGRAM_ENABLED ? dbSettings.INSTAGRAM_ENABLED === 'true' : process.env.INSTAGRAM_ENABLED === 'true',
+      username: dbSettings.INSTAGRAM_USERNAME || process.env.INSTAGRAM_USERNAME || '',
+      maxPostsPerCycle: Number(dbSettings.INSTAGRAM_MAX_POSTS_PER_CYCLE || process.env.INSTAGRAM_MAX_POSTS_PER_CYCLE || 3),
+      bioLink: dbSettings.INSTAGRAM_BIO_LINK || process.env.INSTAGRAM_BIO_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
+      customHashtags: dbSettings.INSTAGRAM_HASHTAGS || process.env.INSTAGRAM_HASHTAGS || '#achadinhos #ofertas #mercadolivre #desconto',
     },
   };
 }

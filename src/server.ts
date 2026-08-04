@@ -238,6 +238,11 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       fbDelayBetweenPosts: config.facebook.delayBetweenPostsSec,
       fbWaGroupLink: config.facebook.waGroupLink,
       fbAutoJoin: config.facebook.autoJoin,
+      igEnabled: config.instagram.enabled,
+      igUsername: config.instagram.username,
+      igMaxPostsPerCycle: config.instagram.maxPostsPerCycle,
+      igBioLink: config.instagram.bioLink,
+      igCustomHashtags: config.instagram.customHashtags,
     });
   }
 
@@ -263,6 +268,13 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       if (body.fbDelayBetweenPosts !== undefined && body.fbDelayBetweenPosts !== '') updates.FB_DELAY_BETWEEN_POSTS = String(body.fbDelayBetweenPosts);
       if (typeof body.fbWaGroupLink === 'string') updates.FB_WA_GROUP_LINK = body.fbWaGroupLink.trim();
       if (body.fbAutoJoin !== undefined) updates.FB_AUTO_JOIN = body.fbAutoJoin ? 'true' : 'false';
+
+      // Instagram
+      if (body.igEnabled !== undefined) updates.INSTAGRAM_ENABLED = body.igEnabled ? 'true' : 'false';
+      if (typeof body.igUsername === 'string') updates.INSTAGRAM_USERNAME = body.igUsername.trim();
+      if (body.igMaxPostsPerCycle !== undefined && body.igMaxPostsPerCycle !== '') updates.INSTAGRAM_MAX_POSTS_PER_CYCLE = String(body.igMaxPostsPerCycle);
+      if (typeof body.igBioLink === 'string') updates.INSTAGRAM_BIO_LINK = body.igBioLink.trim();
+      if (typeof body.igCustomHashtags === 'string') updates.INSTAGRAM_HASHTAGS = body.igCustomHashtags.trim();
 
       // 1. Grava no Neon PostgreSQL
       await dbSaveMultipleSettings(updates);
