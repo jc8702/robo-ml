@@ -24,41 +24,56 @@ export let currentPairingCode: string | null = null;
 export let pairingCodeRequestedAt: Date | null = null;
 export let currentQrRaw: string | null = null;
 
-// --- Persistencia simplificada de creds no Neon DB ---
+// --- Persistencia completa de todos os arquivos de sessão (.wa-auth/*.json) no Neon DB ---
+import { readdirSync } from 'node:fs';
 
 async function restoreCredsFromDb() {
   const db = getDbPool();
   if (!db) return;
   try {
-    const res = await db.query("SELECT value FROM app_settings WHERE key = 'WA_AUTH_creds.json'");
-    if (res.rows.length > 0 && res.rows[0].value) {
+    const res = await db.query("SELECT key, value FROM app_settings WHERE key LIKE 'WA_AUTH_%'");
+    if (res.rows.length > 0) {
       if (!existsSync(AUTH_DIR)) mkdirSync(AUTH_DIR, { recursive: true });
-      writeFileSync(join(AUTH_DIR, 'creds.json'), res.rows[0].value, 'utf-8');
-      console.log('[DB] Credenciais mestre do WhatsApp restauradas do Neon PostgreSQL.');
+      for (const row of res.rows) {
+        const fileName = row.key.replace('WA_AUTH_', '');
+        writeFileSync(join(AUTH_DIR, fileName), row.value, 'utf-8');
+      }
+      console.log(`[DB] 🔑 ${res.rows.length} arquivo(s) de sessão do WhatsApp restaurado(s) do Neon PostgreSQL.`);
     }
-  } catch {
-    // Ignora erros de banco se desativado/não configurado
+  } catch (err) {
+    console.error('[DB] Erro ao restaurar sessão do WhatsApp:', err);
   }
 }
 
 async function saveCredsToDb() {
   const db = getDbPool();
-  if (!db || !existsSync(join(AUTH_DIR, 'creds.json'))) return;
+  if (!db || !existsSync(AUTH_DIR)) return;
   try {
-    const content = readFileSync(join(AUTH_DIR, 'creds.json'), 'utf-8');
+    const credsPath = join(AUTH_DIR, 'creds.json');
+    if (!existsSync(credsPath)) return;
+    const content = readFileSync(credsPath, 'utf-8');
     const parsed = JSON.parse(content);
-    // IMPORTANTE: Só envia/salva no Neon DB se a sessão estiver 100% pareada e registrada!
-    if (!parsed.registered) {
-      return;
+    if (!parsed.registered) return;
+
+    const files = readdirSync(AUTH_DIR);
+    const client = await db.connect();
+    try {
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          const fileContent = readFileSync(join(AUTH_DIR, file), 'utf-8');
+          await client.query(
+            `INSERT INTO app_settings (key, value) VALUES ($1, $2)
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+            [`WA_AUTH_${file}`, fileContent]
+          );
+        }
+      }
+      console.log(`[DB] 💾 ${files.length} arquivo(s) de sessão do WhatsApp salvos no Neon PostgreSQL.`);
+    } finally {
+      client.release();
     }
-    await db.query(
-      `INSERT INTO app_settings (key, value) VALUES ('WA_AUTH_creds.json', $1)
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-      [content]
-    );
-    console.log('[DB] Credenciais mestre do WhatsApp salvas no Neon PostgreSQL.');
-  } catch {
-    // Ignora erros de banco
+  } catch (err) {
+    console.error('[DB] Erro ao salvar sessão do WhatsApp no Neon:', err);
   }
 }
 
