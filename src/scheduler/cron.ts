@@ -8,6 +8,7 @@ import { convertOffers } from '../affiliate/link-converter.js';
 import { sendOfferWithPhoto, initWhatsAppClient } from '../whatsapp/client.js';
 import { saveSentOffersToHistory } from '../collector/history.js';
 import { postOffersToFacebookGroups } from '../facebook/fb-poster.js';
+import { dbGetSettings } from '../db/index.js';
 
 /** Referência do cron agendado para permitir cancelamento externo */
 let scheduledTask: ScheduledTask | null = null;
@@ -108,7 +109,12 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
 }
 
 export async function startScheduler(config: AppConfig): Promise<void> {
-  let cronExpression = process.env.AUTO_SCHEDULE_CRON || '0 */3 * * *';
+  if (scheduledTask) {
+    stopScheduler();
+  }
+
+  const dbSettings = await dbGetSettings();
+  let cronExpression = dbSettings.AUTO_SCHEDULE_CRON || process.env.AUTO_SCHEDULE_CRON || '0 */3 * * *';
 
   if (!cron.validate(cronExpression)) {
     console.warn(`\n[CRON] Expressao Cron invalida: "${cronExpression}". Usando padrao "0 */3 * * *" (a cada 3 horas).`);

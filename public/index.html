@@ -772,6 +772,21 @@
         </div>
 
         <div class="form-grid">
+          <div class="field" style="grid-column: span 2;">
+            <label for="affiliateId">ID de Afiliado Mercado Livre (TAG Oficial):</label>
+            <input type="text" id="affiliateId" placeholder="Ex: 52075002">
+          </div>
+
+          <div class="field">
+            <label for="groupName">Nome do Grupo Alvo no WhatsApp:</label>
+            <input type="text" id="groupName" placeholder="Ex: GC 19 GRUPO VIP SO MERCADO LIVRE">
+          </div>
+
+          <div class="field">
+            <label for="groupId">ID (JID) do Grupo WhatsApp (Opcional):</label>
+            <input type="text" id="groupId" placeholder="Ex: 120363428727908129@g.us">
+          </div>
+
           <div class="field">
             <label for="minPrice">Preço Mínimo (R$)</label>
             <input type="number" id="minPrice" value="30">
@@ -779,12 +794,12 @@
 
           <div class="field">
             <label for="maxPrice">Preço Máximo (R$)</label>
-            <input type="number" id="maxPrice" value="500">
+            <input type="number" id="maxPrice" value="10000">
           </div>
 
           <div class="field">
             <label for="minDiscount">Desconto Mínimo (%)</label>
-            <input type="number" id="minDiscount" value="10">
+            <input type="number" id="minDiscount" value="0">
           </div>
 
           <div class="field">
@@ -1275,6 +1290,9 @@
           if (Array.isArray(data.categories) && data.categories.length > 0) {
             selectedCategories = data.categories;
           }
+          if (data.affiliateId) document.getElementById('affiliateId').value = data.affiliateId;
+          if (data.groupName) document.getElementById('groupName').value = data.groupName;
+          if (data.groupId) document.getElementById('groupId').value = data.groupId;
           if (data.minPrice !== undefined) document.getElementById('minPrice').value = data.minPrice;
           if (data.maxPrice !== undefined) document.getElementById('maxPrice').value = data.maxPrice;
           if (data.minDiscount !== undefined) document.getElementById('minDiscount').value = data.minDiscount;
@@ -1301,9 +1319,12 @@
     async function saveAllConfig() {
       const payload = {
         categories: selectedCategories,
+        affiliateId: document.getElementById('affiliateId').value.trim(),
+        groupName: document.getElementById('groupName').value.trim(),
+        groupId: document.getElementById('groupId').value.trim(),
         minPrice: parseFloat(document.getElementById('minPrice').value) || 30,
-        maxPrice: parseFloat(document.getElementById('maxPrice').value) || 500,
-        minDiscount: parseFloat(document.getElementById('minDiscount').value) || 10,
+        maxPrice: parseFloat(document.getElementById('maxPrice').value) || 10000,
+        minDiscount: parseFloat(document.getElementById('minDiscount').value) || 0,
         maxResults: parseInt(document.getElementById('maxResults').value, 10) || 10,
         cronSchedule: document.getElementById('cronSchedule').value,
         fbEnabled: document.getElementById('fbEnabled').checked,

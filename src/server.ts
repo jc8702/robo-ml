@@ -4,7 +4,7 @@ import { join, extname } from 'node:path';
 import { exec } from 'node:child_process';
 import { loadConfig, loadConfigAsync, type AppConfig } from './config/settings.js';
 import { runAutomaticCycle, startScheduler, stopScheduler } from './scheduler/cron.js';
-import { dbSaveMultipleSettings, initDb } from './db/index.js';
+import { dbSaveMultipleSettings, dbGetSettings, initDb } from './db/index.js';
 import { currentPairingCode, pairingCodeRequestedAt, currentQrRaw } from './whatsapp/client.js';
 import { getSentOffersHistoryFromDb } from './collector/history.js';
 
@@ -217,6 +217,8 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
   // GET /api/config
   if (method === 'GET' && (url === '/api/config' || url.endsWith('/config'))) {
     const config = await loadConfigAsync();
+    const dbSettings = await dbGetSettings();
+
     return sendJson({
       categories: config.filters.categories,
       queries: config.queries,
@@ -224,9 +226,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       maxPrice: config.filters.maxPrice,
       minDiscount: config.filters.minDiscount,
       maxResults: config.filters.maxResults,
-      cronSchedule: process.env.AUTO_SCHEDULE_CRON || '0 */3 * * *',
+      cronSchedule: dbSettings.AUTO_SCHEDULE_CRON || process.env.AUTO_SCHEDULE_CRON || '0 */3 * * *',
       affiliateId: config.affiliate.id,
-      groupId: process.env.WHATSAPP_GROUP_ID || '',
+      groupId: dbSettings.WHATSAPP_GROUP_ID || process.env.WHATSAPP_GROUP_ID || '',
+      groupName: dbSettings.WHATSAPP_GROUP_NAME || process.env.WHATSAPP_GROUP_NAME || '',
       isRunning: isBotRunning,
       fbEnabled: config.facebook.enabled,
       fbGroupUrls: config.facebook.groupUrls,
@@ -243,28 +246,40 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       const body = await parseJsonBody(req);
       const updates: Record<string, string> = {};
 
-      if (Array.isArray(body.categories)) {
-        updates.ML_CATEGORIES = body.categories.join(',');
-      }
-      if (Array.isArray(body.queries)) {
-        updates.ML_SEARCH_QUERIES = body.queries.join(',');
-      }
+      if (Array.isArray(body.categories)) updates.ML_CATEGORIES = body.categories.join(',');
+      if (Array.isArray(body.queries)) updates.ML_SEARCH_QUERIES = body.queries.join(',');
+      if (typeof body.affiliateId === 'string' && body.affiliateId.trim()) updates.ML_AFFILIATE_ID = body.affiliateId.trim();
+      if (typeof body.groupId === 'string') updates.WHATSAPP_GROUP_ID = body.groupId.trim();
+      if (typeof body.groupName === 'string') updates.WHATSAPP_GROUP_NAME = body.groupName.trim();
       if (body.minPrice !== undefined && body.minPrice !== '') updates.ML_MIN_PRICE = String(body.minPrice);
       if (body.maxPrice !== undefined && body.maxPrice !== '') updates.ML_MAX_PRICE = String(body.maxPrice);
       if (body.minDiscount !== undefined && body.minDiscount !== '') updates.ML_MIN_DISCOUNT = String(body.minDiscount);
       if (body.maxResults !== undefined && body.maxResults !== '') updates.ML_MAX_RESULTS = String(body.maxResults);
-      if (typeof body.cronSchedule === 'string') updates.AUTO_SCHEDULE_CRON = body.cronSchedule;
+      if (typeof body.cronSchedule === 'string' && body.cronSchedule.trim()) updates.AUTO_SCHEDULE_CRON = body.cronSchedule.trim();
       if (body.fbEnabled !== undefined) updates.FB_ENABLED = body.fbEnabled ? 'true' : 'false';
       if (Array.isArray(body.fbGroupUrls)) updates.FB_GROUP_URLS = body.fbGroupUrls.join(',');
       if (body.fbMaxGroupsPerCycle !== undefined && body.fbMaxGroupsPerCycle !== '') updates.FB_MAX_GROUPS_PER_CYCLE = String(body.fbMaxGroupsPerCycle);
       if (body.fbDelayBetweenPosts !== undefined && body.fbDelayBetweenPosts !== '') updates.FB_DELAY_BETWEEN_POSTS = String(body.fbDelayBetweenPosts);
-      if (typeof body.fbWaGroupLink === 'string') updates.FB_WA_GROUP_LINK = body.fbWaGroupLink;
+      if (typeof body.fbWaGroupLink === 'string') updates.FB_WA_GROUP_LINK = body.fbWaGroupLink.trim();
       if (body.fbAutoJoin !== undefined) updates.FB_AUTO_JOIN = body.fbAutoJoin ? 'true' : 'false';
 
+      // 1. Grava no Neon PostgreSQL
       await dbSaveMultipleSettings(updates);
+
+      // 2. Atualiza variáveis de ambiente em memória
+      for (const [k, v] of Object.entries(updates)) {
+        process.env[k] = v;
+      }
       updateEnvFile(updates);
 
-      return sendJson({ success: true, message: 'Configurações atualizadas no Neon PostgreSQL e sincronizadas com sucesso!' });
+      // 3. Se o bot estiver rodando, reinicia o agendador imediatamente com a nova cronSchedule
+      if (isBotRunning) {
+        stopScheduler();
+        const updatedConfig = await loadConfigAsync();
+        startScheduler(updatedConfig).catch((err) => console.error('Erro ao reiniciar agendador:', err));
+      }
+
+      return sendJson({ success: true, message: 'Configurações salvas e aplicadas imediatamente!' });
     } catch (err) {
       return sendJson({ success: false, error: String(err) }, 400);
     }
