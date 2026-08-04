@@ -48,6 +48,9 @@ export interface InstagramConfig {
   maxPostsPerCycle: number;
   bioLink: string;
   customHashtags: string;
+  autoDmEnabled: boolean;
+  triggerWord: string;
+  dmTemplate: string;
 }
 
 export interface AppConfig {
@@ -122,12 +125,15 @@ export function loadConfig(): AppConfig {
       autoJoin: process.env.FB_AUTO_JOIN !== 'false',
     },
     instagram: {
-      enabled: process.env.INSTAGRAM_ENABLED === 'true',
+      enabled: process.env.INSTAGRAM_ENABLED !== 'false',
       username: process.env.INSTAGRAM_USERNAME || '',
       password: process.env.INSTAGRAM_PASSWORD || '',
       maxPostsPerCycle: Number(process.env.INSTAGRAM_MAX_POSTS_PER_CYCLE ?? 3),
       bioLink: process.env.INSTAGRAM_BIO_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
       customHashtags: process.env.INSTAGRAM_HASHTAGS || '#achadinhos #ofertas #mercadolivre #desconto',
+      autoDmEnabled: process.env.INSTAGRAM_AUTO_DM !== 'false',
+      triggerWord: process.env.INSTAGRAM_TRIGGER_WORD || 'PASSE',
+      dmTemplate: process.env.INSTAGRAM_DM_TEMPLATE || 'Olá! Aqui está o seu link com desconto exclusivo para {title}: {link}',
     },
   };
 }
@@ -146,14 +152,15 @@ export async function loadConfigAsync(): Promise<AppConfig> {
   const maxPrice = Number(dbSettings.ML_MAX_PRICE || process.env.ML_MAX_PRICE || 10000);
   const maxResults = Number(dbSettings.ML_MAX_RESULTS || process.env.ML_MAX_RESULTS || 35);
 
-  const affiliateId = process.env.ML_AFFILIATE_ID || '52075002';
+  const affiliateId = dbSettings.ML_AFFILIATE_ID || process.env.ML_AFFILIATE_ID || '52075002';
+  const affiliateWord = dbSettings.ML_AFFILIATE_WORD || process.env.ML_AFFILIATE_WORD || 'promos-wa';
   const accessToken = process.env.ML_ACCESS_TOKEN || '';
 
   return {
     affiliate: {
       id: affiliateId,
       source: process.env.ML_AFFILIATE_SOURCE || 'whatsapp',
-      word: process.env.ML_AFFILIATE_WORD || 'promos-wa',
+      word: affiliateWord,
     },
     filters: {
       minDiscount,
@@ -180,12 +187,15 @@ export async function loadConfigAsync(): Promise<AppConfig> {
       autoJoin: dbSettings.FB_AUTO_JOIN ? dbSettings.FB_AUTO_JOIN === 'true' : process.env.FB_AUTO_JOIN !== 'false',
     },
     instagram: {
-      enabled: dbSettings.INSTAGRAM_ENABLED ? dbSettings.INSTAGRAM_ENABLED === 'true' : process.env.INSTAGRAM_ENABLED === 'true',
+      enabled: dbSettings.INSTAGRAM_ENABLED ? dbSettings.INSTAGRAM_ENABLED === 'true' : process.env.INSTAGRAM_ENABLED !== 'false',
       username: dbSettings.INSTAGRAM_USERNAME || process.env.INSTAGRAM_USERNAME || '',
       password: dbSettings.INSTAGRAM_PASSWORD || process.env.INSTAGRAM_PASSWORD || '',
       maxPostsPerCycle: Number(dbSettings.INSTAGRAM_MAX_POSTS_PER_CYCLE || process.env.INSTAGRAM_MAX_POSTS_PER_CYCLE || 3),
       bioLink: dbSettings.INSTAGRAM_BIO_LINK || process.env.INSTAGRAM_BIO_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
       customHashtags: dbSettings.INSTAGRAM_HASHTAGS || process.env.INSTAGRAM_HASHTAGS || '#achadinhos #ofertas #mercadolivre #desconto',
+      autoDmEnabled: dbSettings.INSTAGRAM_AUTO_DM ? dbSettings.INSTAGRAM_AUTO_DM === 'true' : process.env.INSTAGRAM_AUTO_DM !== 'false',
+      triggerWord: dbSettings.INSTAGRAM_TRIGGER_WORD || process.env.INSTAGRAM_TRIGGER_WORD || 'PASSE',
+      dmTemplate: dbSettings.INSTAGRAM_DM_TEMPLATE || process.env.INSTAGRAM_DM_TEMPLATE || 'Olá! Aqui está o seu link com desconto exclusivo para {title}: {link}',
     },
   };
 }

@@ -163,7 +163,7 @@ export async function initWhatsAppClient(): Promise<WASocket> {
 
   const rawPhone = process.env.WHATSAPP_PHONE || '';
   const phoneNumber = rawPhone.replace(/\D/g, '');
-  const usePairingCode = phoneNumber.length >= 10;
+  const usePairingCode = process.env.WHATSAPP_USE_PAIRING_CODE === 'true';
   const isRegistered = state.creds.registered;
 
   return new Promise((resolve) => {

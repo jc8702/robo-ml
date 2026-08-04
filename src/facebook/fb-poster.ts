@@ -141,6 +141,14 @@ export async function openFacebookBrowser(): Promise<BrowserContext> {
     };
   });
 
+  // Interceptor global: cancela automaticamente qualquer janela nativa Explorer do SO
+  context.on('page', (p) => {
+    p.on('filechooser', async (fc) => {
+      console.log('[FB] 🛡️ Interceptado FileChooser do SO no Facebook. Fechando janela nativa automaticamente...');
+      await fc.setFiles([]).catch(() => {});
+    });
+  });
+
   // Restaura cookies da sessão do Neon DB
   await restoreFbCookiesFromDb(context);
 
@@ -341,57 +349,58 @@ async function postToFacebookGroup(
       const imgPath = await downloadImageToTemp(offer.thumbnail, offerIndex);
       if (imgPath) {
         try {
-          // A) Injeta o arquivo diretamente no input[type=file] do modal via protocolo CDP (SEM ABRIR JANELA NATIVA)
-          const directFileInput = page.locator('div[role="dialog"] input[type="file"], input[accept*="image"]').first();
-          if (await directFileInput.count() > 0) {
+          // A) Clica no botão "Foto/vídeo" dentro do modal para expandir a área de upload de mídia no Facebook
+          const photoButtonSelectors = [
+            'div[role="dialog"] [aria-label*="Foto/vídeo"]',
+            'div[role="dialog"] [aria-label*="Photo/video"]',
+            'div[role="dialog"] [aria-label*="foto"]',
+            'div[role="dialog"] [aria-label*="photo"]',
+            'div[role="dialog"] div:has-text("Foto/vídeo")',
+          ];
+
+          for (const btnSel of photoButtonSelectors) {
             try {
-              await directFileInput.setInputFiles(imgPath);
-              console.log(`  📸 Foto do produto do Mercado Livre carregada diretamente em 1º lugar!`);
-              photoUploaded = true;
-            } catch {
-              photoUploaded = false;
-            }
+              const btn = page.locator(btnSel).first();
+              if (await btn.isVisible({ timeout: 2000 })) {
+                await btn.click().catch(() => {});
+                await randomDelay(800, 1500);
+                break;
+              }
+            } catch { /* próximo */ }
           }
 
-          // B) Se o input direto não encontrou ou falhou, clica no botão "Foto/vídeo" INTERCEPTANDO O FILECHOOSER
-          // O Promise.all com page.waitForEvent('filechooser') IMPEDE a abertura da janela Explorer do Windows no SO!
-          if (!photoUploaded) {
-            const photoButtonSelectors = [
-              'div[role="dialog"] [aria-label="Foto/vídeo"]',
-              'div[role="dialog"] [aria-label="Photo/video"]',
-              'div[role="dialog"] [aria-label*="foto"]',
-              'div[role="dialog"] [aria-label*="photo"]',
-            ];
+          // B) Injeta o arquivo diretamente no input[type=file] expandido do modal via Playwright CDP (SEM JANELA NATIVA DO SO)
+          const fileInputs = [
+            'div[role="dialog"] input[type="file"]',
+            'input[type="file"][accept*="image"]',
+            'input[type="file"]',
+          ];
 
-            for (const sel of photoButtonSelectors) {
-              try {
-                const btn = page.locator(sel).first();
-                if (await btn.isVisible({ timeout: 2000 })) {
-                  const [fileChooser] = await Promise.all([
-                    page.waitForEvent('filechooser', { timeout: 4000 }).catch(() => null),
-                    btn.click(),
-                  ]);
-
-                  if (fileChooser) {
-                    await fileChooser.setFiles(imgPath);
-                    console.log(`  📸 Imagem do produto carregada via FileChooser em 1º lugar`);
-                    photoUploaded = true;
-                  } else {
-                    // Fallback silencioso no DOM sem disparar diálogo nativo
-                    const fallbackInput = page.locator('div[role="dialog"] input[type="file"]').first();
-                    if (await fallbackInput.count() > 0) {
-                      await fallbackInput.setInputFiles(imgPath);
-                      photoUploaded = true;
-                    }
-                  }
-                  break;
-                }
-              } catch { /* próximo seletor */ }
-            }
+          for (const sel of fileInputs) {
+            try {
+              const fileInput = page.locator(sel).first();
+              if (await fileInput.count() > 0) {
+                await fileInput.setInputFiles(imgPath);
+                photoUploaded = true;
+                console.log(`  📸 Foto do produto carregada via DOM no modal (${sel})!`);
+                break;
+              }
+            } catch { /* próximo */ }
           }
 
           if (photoUploaded) {
-            await randomDelay(3000, 5000); // Espera o preview da foto processar no dialog
+            console.log('  ⏳ Aguardando renderização e upload da foto na CDN do Facebook (5s)...');
+            try {
+              // Aguarda explicitamente a confirmação visual da thumbnail/preview no modal
+              await page.waitForSelector(
+                'div[role="dialog"] img[src*="fbcdn"], div[role="dialog"] img[src*="blob"], div[role="dialog"] [aria-label*="Remover"], div[role="dialog"] [aria-label*="Remove"], div[role="dialog"] [aria-label*="Editar"]',
+                { timeout: 12000 }
+              );
+              console.log('  ✅ Preview da foto confirmado e anexado com sucesso!');
+            } catch {
+              console.log('  ℹ️ Buffer de tempo aplicado para processamento de imagem.');
+            }
+            await randomDelay(4000, 6000); // Delay de segurança obrigatório para vincular imagem ao post
           } else {
             console.log(`  ⚠️ Não foi possível anexar a foto do produto antes de colar o texto.`);
           }
@@ -535,30 +544,30 @@ async function postToFacebookGroup(
       const titleKeywords = offer.title.split(' ').slice(0, 3).join(' ');
       const titleSnippet = offer.title.substring(0, 20);
 
-      // Filtra artigos no feed que contenham o título da oferta postada
-      let targetArticle = page.locator('div[role="article"]').filter({ hasText: titleSnippet }).first();
+      // Filtra artigos no feed do Grupo que contenham o título ou pega o post do topo do feed
+      let targetArticle = page.locator('div[role="feed"] div[role="article"], div[data-pagelet*="FeedUnit"], div[role="main"] div[role="article"]').filter({ hasText: titleSnippet }).first();
       let foundMyPost = await targetArticle.isVisible({ timeout: 3000 }).catch(() => false);
 
       if (!foundMyPost) {
-        targetArticle = page.locator('div[role="article"]').filter({ hasText: titleKeywords }).first();
+        targetArticle = page.locator('div[role="feed"] div[role="article"], div[data-pagelet*="FeedUnit"], div[role="main"] div[role="article"]').filter({ hasText: titleKeywords }).first();
         foundMyPost = await targetArticle.isVisible({ timeout: 3000 }).catch(() => false);
       }
 
-      // Se o feed não tiver atualizado a tempo, faz rolagem suave para encontrar o post
+      // Fallback: seleciona o 1º elemento de post no topo do feed do grupo recém-postado
       if (!foundMyPost) {
-        await page.mouse.wheel(0, 300);
-        await randomDelay(1000, 1500);
+        targetArticle = page.locator('div[role="feed"] [role="article"], div[data-pagelet*="FeedUnit"], div[role="feed"] > div').first();
         foundMyPost = await targetArticle.isVisible({ timeout: 2000 }).catch(() => false);
       }
 
       if (foundMyPost) {
-        console.log(`  🎯 Postagem própria identificada no feed! Inserindo comentário com link VIP...`);
+        console.log(`  🎯 Postagem identificada no topo do feed do Grupo! Inserindo 1º comentário com link do WhatsApp...`);
 
-        // Busca o campo de comentário ESPECIFICAMENTE dentro do artigo da oferta postada
+        // Busca o campo de comentário ESPECIFICAMENTE dentro do post recém-criado
         const commentBoxSelectors = [
           'div[contenteditable="true"][aria-label*="comentá"]',
           'div[contenteditable="true"][aria-label*="Escreva"]',
           'div[contenteditable="true"][aria-label*="comment"]',
+          'div[contenteditable="true"][aria-label*="Comment"]',
           'div[contenteditable="true"]',
           '[role="textbox"]',
         ];
@@ -574,26 +583,50 @@ async function postToFacebookGroup(
           } catch { /* próximo */ }
         }
 
+        // Se ainda não encontrou dentro da sub-árvore, procura a primeira caixa de comentário no feed
+        if (!commentBox) {
+          try {
+            const globalBox = page.locator('div[role="feed"] div[contenteditable="true"][aria-label*="comentá"], div[role="feed"] div[contenteditable="true"][aria-label*="Escreva"], div[role="feed"] div[contenteditable="true"][aria-label*="comment"]').first();
+            if (await globalBox.isVisible({ timeout: 2000 })) {
+              commentBox = globalBox;
+            }
+          } catch { /* ignora */ }
+        }
+
         if (commentBox) {
           await commentBox.scrollIntoViewIfNeeded();
-          await commentBox.click();
+          await commentBox.click({ force: true }).catch(() => {});
           await randomDelay(800, 1200);
 
           const waCommentText = formatFacebookWaComment(waGroupLink);
 
-          // Digitação direta no campo exclusivo do post próprio
-          await page.keyboard.type(waCommentText, { delay: 10 });
+          // Atualiza o Clipboard EXCLUSIVAMENTE para a chamada do WhatsApp
+          await page.evaluate((textToCopy) => {
+            navigator.clipboard.writeText(textToCopy);
+          }, waCommentText);
+
+          // Limpa qualquer texto residual e cola o convite do WhatsApp
+          await commentBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
+          await page.keyboard.press('Control+v');
+          await randomDelay(800, 1200);
+
+          const currentCommentText = (await commentBox.textContent().catch(() => '')) || '';
+          if (!currentCommentText || !currentCommentText.includes('http') || currentCommentText.trim().length < 5) {
+            console.log('  ⚠️ Digitando chamada do WhatsApp no comentário diretamente...');
+            await page.keyboard.type(waCommentText, { delay: 10 });
+          }
+
           await randomDelay(1000, 1500);
 
           // Pressiona Enter para enviar o comentário
           await page.keyboard.press('Enter');
-          console.log('  ✅ 1º Comentário com link do WhatsApp publicado no post correto!');
-          await randomDelay(2000, 3000);
+          console.log('  ✅ 1º Comentário com link do grupo VIP do WhatsApp publicado!');
+          await randomDelay(3000, 4500);
         } else {
           console.log('  ℹ️ Campo de comentário não encontrado dentro da postagem da oferta.');
         }
       } else {
-        console.log('  ⚠️ Não foi possível isolar o post próprio no feed. O comentário não foi inserido em posts de terceiros por segurança.');
+        console.log('  ⚠️ Não foi possível isolar o post próprio no feed.');
       }
     } catch (commentErr) {
       console.log(`  ⚠️ Aviso ao enviar comentário: ${commentErr}`);
@@ -1074,3 +1107,13 @@ export async function autoDiscoverAndJoinFacebookGroups(
     return 0;
   }
 }
+
+export function checkFacebookSessionStatus(): { connected: boolean; profileExists: boolean } {
+  const profileExists = existsSync(FB_PROFILE_DIR);
+  if (!profileExists) return { connected: false, profileExists: false };
+  const hasCookies = existsSync(join(FB_PROFILE_DIR, 'Default', 'Cookies')) || 
+                     existsSync(join(FB_PROFILE_DIR, 'Default', 'Network', 'Cookies')) ||
+                     existsSync(join(FB_PROFILE_DIR, 'Default', 'Storage'));
+  return { connected: hasCookies, profileExists };
+}
+

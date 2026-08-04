@@ -117,11 +117,24 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
           hashtags: config.instagram.customHashtags,
           username: config.instagram.username,
           password: config.instagram.password,
+          triggerWord: config.instagram.triggerWord,
         });
         if (posted.success) countIg++;
         await new Promise((r) => setTimeout(r, 5000));
       }
       console.log(`📸 [INSTAGRAM] Concluído: ${countIg} de ${igOffers.length} ofertas publicadas no Instagram.`);
+
+      // 4.1 Automação de Comentários & Direct (Auto-DM estilo ManyChat)
+      if (config.instagram.autoDmEnabled) {
+        console.log('\n🤖 [INSTAGRAM AUTO-DM] Iniciando checagem de comentários com palavra-chave gatilho...');
+        const { checkAndReplyInstagramComments } = await import('../instagram/ig-auto-reply.js');
+        await checkAndReplyInstagramComments({
+          triggerWord: config.instagram.triggerWord,
+          dmTemplate: config.instagram.dmTemplate,
+          username: config.instagram.username,
+          password: config.instagram.password,
+        }).catch((dmErr) => console.error('❌ [INSTAGRAM AUTO-DM] Erro na automação de Direct:', dmErr));
+      }
     } catch (igErr) {
       console.error('❌ [INSTAGRAM] Erro na automação do Instagram:', igErr);
     }
@@ -157,13 +170,16 @@ export async function startScheduler(config: AppConfig): Promise<void> {
     console.log('[SCHEDULER] WhatsApp: Nenhuma sessão pareada detectada. Dê dois cliques em Conectar-WhatsApp.bat para vincular.');
   }
 
-  await runAutomaticCycle(config);
-
   // Guarda a referência para permitir cancelamento via stopScheduler()
   scheduledTask = cron.schedule(cronExpression, () => {
     runAutomaticCycle().catch((err) => {
       console.error('[CRON] Erro no ciclo automatico:', err);
     });
+  });
+
+  // Executa o primeiro ciclo em segundo plano (sem travar a resposta HTTP do botão na web)
+  runAutomaticCycle(config).catch((err) => {
+    console.error('[CRON] Erro no ciclo inicial de varredura:', err);
   });
 }
 

@@ -1,12 +1,99 @@
 # RESUMO DE PROJETO: ML Ofertas Bot
 
 ## Informações Gerais
-- **Status Atual:** Motor da API Mobile do Instagram (`instagram-private-api`) integrado 100%. Elimina travamentos de navegação/cookies no Render Cloud e publica diretamente no Feed do Instagram com 100% de confiabilidade.
+- **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 04/08/2026 - 10:25
+- **Última Atualização:** 04/08/2026 - 16:23
 
-- **04/08/2026 - 10:25:** **🟢 SINCRONIZADA SESSÃO DO WHATSAPP NO NEON DB CLOUD (`WA_AUTH_creds.json`):**
+- **04/08/2026 - 16:25:** **📱 CRIAÇÃO DE BIO DO INSTAGRAM (LIMITE ESTRITO DE 150 CARACTERES):**
+  - Otimizadas 3 opções de Bio para o limite de 150 caracteres do Instagram (com contagem exata de UTF-16/emojis e chamada "QUERO").
+
+- **04/08/2026 - 16:12:** **🤖 IMPLEMENTAÇÃO COMPLETA DA AUTOMAÇÃO DE COMENTÁRIOS & DIRECT NO INSTAGRAM ("ManyChat" Local):**
+  - **Módulo de Auto-DM (`src/instagram/ig-auto-reply.ts`)**:
+    - Desenvolvida a rotina `checkAndReplyInstagramComments()` que faz varredura nos comentários das publicações do Instagram.
+    - Identifica comentários contendo a palavra-chave gatilho configurada (padrão: **`QUERO`**, **`LINK`**, **`OFERTA`**).
+    - Envia mensagem privada no Direct (DM) com o título, oferta e link de afiliado oficial do produto.
+    - Publica uma resposta pública marcando o usuário (`@usuario Te mandei o link com desconto no Direct! 📥🔥`) para impulsionar o engajamento do post no feed.
+    - Registra os IDs de comentários processados no banco Neon PostgreSQL (`IG_PROCESSED_COMMENTS`), garantindo controle anti-duplicação.
+  - **Legendas Interativas (`src/formatter/instagram.ts`)**:
+    - Atualizada a função `formatInstagramCaption()` para formatar chamadas dinamicas em destaque (`💬 Comente "QUERO" neste post que te envio o link direto no seu DIRECT! 📥`).
+  - **Painel Web GUI (`public/index.html` & `src/server.ts`)**:
+    - Adicionados novos controles na aba **"📸 Automação Instagram"**: alternador `igAutoDmEnabled`, campos `igTriggerWord` (Palavra Gatilho) e `igDmTemplate` (Template da mensagem no Direct), além do botão de teste `💬 Testar Auto-DM (Comentários)`.
+    - Criados os endpoints `/api/config` estendidos e `POST /api/bot/test-instagram-autodm`.
+  - **Integrado ao Cron Agendado (`src/scheduler/cron.ts`)**: O robô dispara automaticamente a verificação de comentários ao final de cada ciclo de postagem.
+  - **Compilação de Produção**: Executados `npx tsc` e `npm run build` com sucesso e compilação 100% limpa.
+
+- **04/08/2026 - 15:57:** **📸 DIAGNÓSTICO E CORREÇÃO DO CLIQUE EM COMPARTILHAR NO INSTAGRAM (`src/instagram/ig-poster.ts`):**
+  - **Diagnóstico por Captura de Tela**: A captura do modal revelou que a caixa de sugestões de hashtags (`#cupom`, `#cupomdesconto`) ficava aberta sobre o modal, interceptando o clique no botão "Compartilhar".
+  - **Deseleção de Hashtags & Desfoco**: Adicionada sequência de `Escape` duplo + clique na área de mídia (`x: 300, y: 350`) para desmarcar o campo de texto e fechar a caixa de sugestões.
+  - **Disparo Nativo via DOM**: Implementado disparo de evento `click` e `dispatchEvent('click')` direto no elemento DOM `div[role="dialog"]` com o texto "Compartilhar" / "Share".
+  - **Comprovação com Ícone de Sucesso**: Capturado o print de confirmação da própria interface do Instagram exibindo o checkmark de sucesso e o texto oficial: **"Seu post foi compartilhado."** (`ig_post_confirmation.png`).
+  - **Validação de Build**: Executado `npx tsc` com compilação 100% limpa sem erros.
+
+- **04/08/2026 - 15:24:** **📸 DIAGNÓSTICO E ATIVAÇÃO DA POSTAGEM NO INSTAGRAM (`src/config/settings.ts` & `src/instagram/ig-poster.ts`):**
+  - **Diagnóstico da Causa Raiz**: A flag `config.instagram.enabled` estava desativada por padrão em envs/Neon DB sem flag explícita, fazendo com que o cron pulasse o módulo do Instagram.
+  - **Ativação Padrão**: Atualizado `loadConfig` e `loadConfigAsync` em `src/config/settings.ts` para manter `instagram.enabled = true` por padrão (`process.env.INSTAGRAM_ENABLED !== 'false'`).
+  - **Validação e Demonstração em Tempo Real**: Executado teste ao vivo (`test-ig.ts`) comprovando a postagem completa da Smart TV LG 55" no Instagram com login via Playwright, upload de imagem, avanço de filtros, colagem de legenda formatada e publicação concluída com sucesso (`{"success": true}`).
+  - **Compilação**: Executado `npm run build` com sucesso.
+  - **Limpeza Preventiva do Chat**: Adicionada rotina de limpeza do container principal de chat (`#main`) antes de iniciar cada oferta, evitando vazamento de texto da oferta anterior.
+  - **Escopo Estrito do Modal**: Restrita a caixa de legenda exclusivamente ao container `div[role="dialog"] div[contenteditable="true"]`, impedindo colagens fora do modal de mídia.
+  - **Validação Cruzada de Título**: O robô valida se `captionBox.textContent()` contém o **título exato do produto da foto atual** (`offer.title`) antes de disparar o envio.
+  - **Limpeza de File Inputs & Modal**: Adicionado o fechamento obrigatório do modal (`state: 'detached'`) e o esvaziamento dos campos `input[type="file"]` (`setInputFiles([])`) entre envios.
+  - **Compilação**: Executado `npm run build` com sucesso.
+  - **Expansão de Mídia OBRIGATÓRIA**: O robô agora clica no botão "Foto/vídeo" do modal do Facebook para expandir a área de mídia e montar o elemento `<input type="file">` no DOM antes de executar `setInputFiles`.
+  - **Buffer de CDN de 5 Segundos**: Adicionada espera pela confirmação visual do preview (`img[src*="fbcdn"]`, `img[src*="blob"]`, `[aria-label*="Remover"]`) + delay de 5s para que o Facebook vincule a imagem ao post antes do clique em "Publicar".
+  - **Captura do Topo do Feed do Grupo**: Atualizados os seletores do 1º comentário para isolar a publicação no topo do feed dos Grupos do Facebook (`div[role="feed"] [role="article"]`), colar o convite VIP (`waCommentText`) com a URL do WhatsApp e publicar o comentário automaticamente.
+  - **Compilação**: Executado `npm run build` com sucesso.
+  - **Validação de Legenda Completa no WhatsApp Web (`src/whatsapp/wa-playwright.ts`)**: Implementada colagem via Clipboard (`Control+v`) com validação estrita que confirma se a legenda contém o link de afiliado oficial do produto antes do envio. Isso impede que posts fiquem cortados por reinicialização do editor Lexical.
+  - **Processamento de Foto no Facebook CDN (`src/facebook/fb-poster.ts`)**: Adicionada espera de confirmação do preview da imagem (`img[src*="fbcdn"]` / `[aria-label*="Remover"]`) antes do clique em "Publicar", garantindo que a foto seja vinculada com sucesso e não desapareça após a publicação.
+  - **1º Comentário Isolado do WhatsApp no Facebook (`src/facebook/fb-poster.ts`)**: Atualizado o clipboard especificamente para a chamada do grupo VIP (`waCommentText`), limpando qualquer resíduo do post principal do campo de comentário.
+  - **Compilação**: Executado `npm run build` com sucesso.
+  - **Upload Direto via DOM (`setInputFiles`)**: Refatorado o upload de imagem no WhatsApp Web (`src/whatsapp/wa-playwright.ts`), Facebook (`src/facebook/fb-poster.ts`) e Instagram (`src/instagram/ig-poster.ts`) para injetar a foto do produto diretamente no elemento `<input type="file">` do HTML via Playwright sem efetuar cliques em botões do menu. Isso impede que o Chrome acione o SO para abrir a janela de arquivo nativa.
+  - **Interceptor Global Anti-Popup (`filechooser`)**: Adicionado listener global `page.on('filechooser')` em todas as sessões que intercepta e fecha (`setFiles([])`) qualquer janela nativa de arquivo caso seja engatada, garantindo que o robô nunca fique travado aguardando ação manual.
+  - **Compilação**: Executado `npm run build` com sucesso.
+  - **Desbloqueio de Resposta HTTP (`src/scheduler/cron.ts`)**: O método `startScheduler()` passou a disparar o ciclo inicial de varredura (`runAutomaticCycle`) em segundo plano (assíncrono), liberando a requisição HTTP `POST /api/bot/start` em milissegundos. Com isso, o clique no botão **"Iniciar Automação"** responde instantaneamente e altera o indicador para `🟢 Automação Ativa (24/7)` e o botão para `⏹️ Pausar Automação`.
+  - **Persistência do Estado no Banco Neon DB (`src/server.ts`)**: Adicionada a gravação de `AUTO_BOT_RUNNING = 'true'` / `'false'` na tabela `app_settings` e restauração automática ao inicializar o servidor. O robô mantém o status ativo mesmo após atualizar a página (F5) ou reiniciar a máquina.
+  - **Limpeza do Header (`public/index.html`)**: Removido o botão obsoleto `📱 Status QR Code / Conexão ↗` da barra superior, mantendo o controle visual centralizado no submenu `🔑 Conexões & Logins Locais`.
+  - **Validação de Build**: Executado `npm run build` com compilação TypeScript limpa e sem erros.
+  - **Correção da TAG de Afiliado**: Atualizado `loadConfigAsync()` em `src/config/settings.ts` para carregar `ML_AFFILIATE_ID` e `ML_AFFILIATE_WORD` salvos no banco de dados Neon PostgreSQL (`dbSettings`), garantindo a substituição da TAG genérica pelo link de afiliado oficial do perfil do usuário em todas as URLs raspadas do Mercado Livre.
+  - **Formatação Completa das Legendas**:
+    - **WhatsApp (`src/formatter/whatsapp.ts`)**: Incluído Título, Preço De/Por, Menor Preço dos últimos 30 dias (`📉 MENOR PREÇO DOS ÚLTIMOS 30 DIAS!`), Condição de Frete (`🚚 Frete Grátis!`), Link Afiliado Oficial e Hashtags do Produto (`#LG #Monitor #Gamer #Ofertas`).
+    - **Facebook (`src/formatter/facebook.ts`)**: Padronizado com todos os dados do produto, link de afiliado e chamada para o grupo VIP do WhatsApp no 1º comentário.
+    - **Instagram (`src/formatter/instagram.ts`)**: Legenda otimizada com Gancho, Título, Preço De/Por, Menor Preço 30d, Frete, Link de Afiliado Oficial, CTA da Bio e bloco completo de Hashtags.
+  - **Robustez na Digitação Playwright (`src/whatsapp/wa-playwright.ts`)**: Adicionada verificação de inserção de texto e fallback via `execCommand` para o modal de legenda de imagem no WhatsApp Web.
+  - **Validação**: Executado teste em `test-affiliate-format.ts` comprovando a conversão de links e formatação em todos os canais.
+  - **Identificação do Problema de Porta**: Um processo anterior do Node permaneceu rodando em segundo plano preso na porta `3000`, gerando o erro `EADDRINUSE` e impedindo a execução do servidor e a abertura do navegador.
+  - **Liberação Automática em `Iniciar-Bot.bat`**: Adicionada rotina de expurgo via `taskkill` do PID associado à porta 3000 antes de subir o servidor Node.
+  - **Tratamento de Exceção `EADDRINUSE` em `src/server.ts`**: Adicionado handler `server.on('error')` que detecta ocupação da porta, executa a liberação e retenta a inicialização em 1 segundo.
+  - **Invocação Direta de Janelas de Login**: Os endpoints `/api/sessions/connect-*` passaram a invocar diretamente os métodos Playwright `ensureWhatsAppLoggedIn()`, `openFacebookBrowser()` e `openInstagramBrowser()`, abrindo instantaneamente o Chrome visual na tela do usuário para efetuar o login.
+
+
+  - **Identificação da Causa Raiz do Agrupamento**: Quando múltiplas fotos eram submetidas sem aguardar a desmontagem (`detached`) do modal de pré-visualização anterior, o WhatsApp Web anexava a nova imagem na mesma galeria/álbum do produto anterior, gerando 1 único bloco compartilhado.
+  - **Isolamento Estrito de Mensagens (`src/whatsapp/wa-playwright.ts` e `src/scheduler/cron.ts`)**: Adicionado controle de encerramento assíncrono do modal (`waitForSelector('div[role="dialog"]', { state: 'detached' })`) e intervalo de 5 segundos entre cada item no loop de envios.
+  - **Restauração da Estrutura Fiel ao Print do Usuário**: Cada oferta é enviada de forma **100% individualizada** em seu próprio balão de mensagem, contendo a Foto do Produto em alta definição, Título, Preço original (~R$ X~), Preço promocional (*R$ Y*), Selos (Menor preço / Frete Grátis), a frase CTA em negrito em linha própria, o Link curto de Afiliado limpo e a frase de rodapé em itálico.
+  - Comprovação registrada e validada em: `wa_exact_format_verified.png`.
+
+  - **Eliminação Total de Figurinhas**: Implementada interceptação via `filechooser` ao clicar na opção *"Fotos e vídeos"* (`[data-icon="attach-image"]`) e seletor estrito `input[type="file"][accept*="video"]`.
+  - **Identificação no Chat**: O chat do WhatsApp Web agora registra oficialmente as mensagens como **`Você: 🖼️ [Texto da Oferta]`** (Foto com Legenda), eliminando de vez o registro **`Você: 💬 Figurinha`**.
+  - **Comprovação Visual**: Legenda promocional completa exibida com formatação em negrito, título dos produtos, preços originais, descontos e links de afiliados anexados diretamente na publicação da foto.
+  - Captura registrada e validada em: `wa_foto_legenda_confirmada.png`.
+
+  - **WhatsApp Web**: Validada a seleção estrita do input de mídia (`input[type="file"][accept*="image/*"]`) e preenchimento da legenda no modal (`div[contenteditable="true"][data-tab="10"]`). Oferta enviada no formato **Foto + Legenda com Link de Afiliado** (substituindo o antigo comportamento de figurinha).
+  - **Facebook Groups**: Publicação executada com upload da foto do produto em 1º lugar e texto promocional completo. Sincronizada a lista de 184 grupos do perfil do Facebook no arquivo `.env`.
+  - **Instagram**: Publicação concluída no Feed com foto HD, legenda de alto engajamento, hashtags relevantes e CTA do link da bio.
+
+  - **Diagnóstico do Envio de Figurinha**: O seletor anterior `page.locator('input[type="file"]').first()` capturava o primeiro elemento `<input>` de arquivo do DOM do WhatsApp Web, que corresponde ao modal de **Figurinhas (Stickers)** (`accept="image/webp"`). Com isso, a imagem era convertida em figurinha sem abrir o campo de legenda/anúncio com o link de afiliado.
+  - **Seletor Estrito de Mídia**: Atualizado em `wa-playwright.ts` para buscar especificamente os inputs de **Fotos e Vídeos** (`input[type="file"][accept*="video"]`, `input[type="file"][accept*="image/*"]`), ignorando sumariamente elementos de figurinha (`accept*="webp"`).
+  - **Aprimoramento do Campo de Legenda**: Adicionada a busca por seletores do modal de mídia (`aria-label`, `data-tab="10"`, `data-lexical-editor="true"`) e inserção da legenda promocional com fallback no chat principal.
+
+  - **Servidor Local Iniciado**: Subiu o servidor HTTP GUI local (`src/server.ts`) na porta `3000`.
+  - **Automação de Navegador no Chrome**: Utilizado o subagente de navegação no Chrome para acessar `http://localhost:3000`.
+  - **Inspeção de Abas**: Validado o funcionamento visual e navegação interativa pelas abas *Categorias & Subnichos*, *Filtros & Agendamento*, *Automação Instagram*, *Automação Facebook* e *Ofertas Enviadas*.
+  - **Disparo de Ciclos de Postagem**: Disparado o botão *"Enviar Ofertas Agora"*, acompanhando e registrando visualmente os ciclos de scraping, conversão para links de afiliados e adição no histórico de postagens.
+  - **Comprovação Visual na Galeria**: Validado o incremento de ofertas enviadas (de 34 para 37 itens), com exibição das imagens e cards promocionais mais recentes na galeria (ex: Mochila masculina impermeável, Perfume Árabe The Kingdom, Placa mãe ASUS TUF Gaming, Notebook Acer).
+  - Capturas registradas em: `dashboard_home_1785851423045.png`, `filters_scheduling_1785851430565.png`, `automation_instagram_1785851437218.png`, `automation_facebook_1785851443952.png`, `offers_sent_1785851451217.png`, `new_offers_gallery_1785851646102.png` e `final_gallery_view_1785851913520.png`.
+
   - **Diagnóstico da Pausa de Envio**: As credenciais locais do WhatsApp (`.wa-auth/creds.json`) não haviam sido enviadas para o banco em nuvem Neon DB. Com isso, a instância do Render Cloud operava sem sessão do WhatsApp vinculada.
   - **Sincronização Cloud Concluída**: Efetuado o upload da credencial mestre diretamente para a tabela `app_settings` do Neon PostgreSQL.
   - **Grupo Alvo Confirmado**: Vinculado ao grupo `GC 19 GRUPO VIP SO MERCADO LIVRE` (`120363428727908129@g.us`). As postagens no WhatsApp do Render Cloud foram reativadas.

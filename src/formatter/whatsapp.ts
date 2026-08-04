@@ -1,5 +1,6 @@
 import type { AffiliateOffer } from '../affiliate/link-converter.js';
 import { getRandomLinkCta, getRandomFooterCta } from './cta-phrases.js';
+import { formatHashtagsLine } from './hashtag-generator.js';
 
 /**
  * Formata um preço em reais brasileiro.
@@ -36,12 +37,17 @@ export function formatIndividualOffer(offer: AffiliateOffer): string {
 
   if (offer.freeShipping) {
     lines.push('🚚 *Frete Grátis!*');
+  } else {
+    lines.push('🚚 *Frete Rápido & Entrega Garantida!*');
   }
 
   lines.push('');
-  lines.push(`${getRandomLinkCta(true)} ${offer.affiliateLink}`);
+  lines.push(getRandomLinkCta(true));
+  lines.push(offer.affiliateLink || offer.permalink);
   lines.push('');
   lines.push(getRandomFooterCta(true));
+  lines.push('');
+  lines.push(formatHashtagsLine(offer.title, 5));
 
   return lines.join('\n');
 }

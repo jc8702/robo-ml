@@ -60,6 +60,12 @@ export async function openWhatsAppBrowser(): Promise<{ context: BrowserContext; 
   const pages = context.pages();
   waPage = pages.length > 0 ? pages[0] : await context.newPage();
 
+  // Interceptor global: fecha automaticamente qualquer janela de seleção de arquivo nativa do SO
+  waPage.on('filechooser', async (fileChooser) => {
+    console.log('[WA-PLAYWRIGHT] 🛡️ Interceptado FileChooser do SO no WhatsApp Web. Fechando janela nativa automaticamente...');
+    await fileChooser.setFiles([]).catch(() => {});
+  });
+
   console.log('[WA-PLAYWRIGHT] Navegando para https://web.whatsapp.com...');
   await waPage.goto('https://web.whatsapp.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
@@ -129,74 +135,155 @@ export async function sendOfferWithPhotoPlaywright(
     console.log(`[WA-PLAYWRIGHT] Selecionando conversa/grupo: "${targetSearchTerm}"...`);
 
     // Procura a barra de pesquisa de conversas
-    const searchSelector = '#side div[contenteditable="true"], [aria-label="Caixa de texto de pesquisa"], [aria-label="Pesquisar ou começar uma nova conversa"]';
-    const searchBox = await page.waitForSelector(searchSelector, { timeout: 15000 });
-
-    if (searchBox) {
-      await searchBox.click();
-      await searchBox.fill('');
-      await searchBox.type(targetSearchTerm, { delay: 100 });
-      await page.waitForTimeout(2000);
-
-      // Pressiona Enter para abrir a conversa encontrada
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(2000);
+    const searchSelector = '#side div[contenteditable="true"], [aria-label*="Pesquisar"], [aria-placeholder*="Pesquisar"], [data-tab="3"], [title*="Pesquisar"]';
+    try {
+      const searchBox = await page.waitForSelector(searchSelector, { timeout: 7000 });
+      if (searchBox) {
+        await searchBox.click();
+        await page.waitForTimeout(300);
+        await searchBox.fill('').catch(() => {});
+        await searchBox.type(targetSearchTerm, { delay: 100 });
+        await page.waitForTimeout(2000);
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(2000);
+      }
+    } catch {
+      console.log('[WA-PLAYWRIGHT] Barra de pesquisa não alterada, prosseguindo com a conversa ativa...');
     }
 
     // Se tiver imagem, baixa localmente para fazer upload
     if (offer.thumbnail && offer.thumbnail.startsWith('http')) {
       const tempImgPath = join(process.cwd(), `temp_offer_${Date.now()}.jpg`);
       try {
+        // Limpeza preventiva da caixa de mensagem principal do chat para não reter legendas anteriores
+        try {
+          const mainChatBox = page.locator('#main div[contenteditable="true"]').first();
+          if ((await mainChatBox.count()) > 0) {
+            await mainChatBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
+          }
+        } catch { /* ignora */ }
+
         const response = await fetch(offer.thumbnail);
         const buffer = await response.arrayBuffer();
         writeFileSync(tempImgPath, Buffer.from(buffer));
 
-        // Clica no botão de anexar (+)
+        // 1. Clica no botão de anexar (+) se necessário para expandir os inputs do WhatsApp Web
         const attachSelector = '[aria-label*="Anexar"], [title*="Anexar"], [data-icon="plus"], [data-icon="clip"]';
         try {
           const attachBtn = page.locator(attachSelector).first();
-          if (await attachBtn.isVisible({ timeout: 3000 })) {
+          if (await attachBtn.isVisible({ timeout: 2500 })) {
             await attachBtn.click();
-            await page.waitForTimeout(800);
+            await page.waitForTimeout(600);
           }
         } catch { /* se já estiver expandido */ }
 
-        // Faz o upload no input de arquivo (mesmo que oculto pelo CSS do WhatsApp)
-        const fileInput = page.locator('input[type="file"]').first();
-        await fileInput.setInputFiles(tempImgPath);
-        await page.waitForTimeout(2500);
-
-        // Digita a legenda no modal de pré-visualização da imagem
-        const captionSelectors = [
-          'div[contenteditable="true"][aria-placeholder*="legenda"]',
-          'div[contenteditable="true"][aria-placeholder*="caption"]',
-          'div[role="textbox"][contenteditable="true"]',
-          '#main div[contenteditable="true"]'
+        // 2. Injeta o arquivo diretamente no <input type="file"> do DOM via CDP (NUNCA clica no botão para NUNCA abrir a janela Explorer do Windows)
+        let fileUploaded = false;
+        const fileInputSelectors = [
+          'input[type="file"][accept*="video"]',
+          'input[type="file"][accept*="image"]',
+          'input[type="file"]',
         ];
 
-        let captionBox = null;
-        for (const sel of captionSelectors) {
+        for (const selector of fileInputSelectors) {
           try {
-            const el = page.locator(sel).first();
-            if (await el.isVisible({ timeout: 2000 })) {
-              captionBox = el;
+            const fileInput = page.locator(selector).first();
+            if ((await fileInput.count()) > 0) {
+              await fileInput.setInputFiles(tempImgPath);
+              fileUploaded = true;
+              console.log(`[WA-PLAYWRIGHT] ✅ Foto carregada via injetor direto de DOM sem abrir Explorer (${selector})!`);
               break;
             }
-          } catch { /* próximo */ }
+          } catch { /* tenta próximo */ }
         }
 
-        if (captionBox) {
-          await captionBox.click({ force: true }).catch(() => captionBox.focus().catch(() => {}));
-          await page.keyboard.insertText(caption);
-          await page.waitForTimeout(1000);
+        if (!fileUploaded) {
+          // Se o botão '+' não estava aberto, forçar expansão e injetar diretamente
+          try {
+            const attachBtn = page.locator(attachSelector).first();
+            await attachBtn.click().catch(() => {});
+            await page.waitForTimeout(500);
+            const photoInput = page.locator('input[type="file"]').first();
+            await photoInput.setInputFiles(tempImgPath);
+            fileUploaded = true;
+            console.log('[WA-PLAYWRIGHT] ✅ Foto carregada via injetor DOM (fallback)!');
+          } catch (err) {
+            console.warn('[WA-PLAYWRIGHT] ⚠️ Falha ao injetar foto no input:', err);
+          }
+        }
+
+        await page.waitForTimeout(2000);
+
+        // 3. Digita a legenda ESTRITAMENTE dentro do modal de pré-visualização da imagem (div[role="dialog"])
+        const captionBox = page.locator('div[role="dialog"] div[contenteditable="true"]').first();
+
+        if (await captionBox.isVisible({ timeout: 4000 })) {
+          console.log(`[WA-PLAYWRIGHT] 📝 Inserindo legenda exata para: "${offer.title.substring(0, 25)}..."`);
+          const titleSnippet = offer.title.substring(0, 15);
+          const targetLink = offer.affiliateLink || offer.permalink || '';
+          let textConfirmed = false;
+
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            // Limpa o modal totalmente antes da colagem para não misturar legendas
+            await captionBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
+            await captionBox.click({ force: true }).catch(() => captionBox.focus().catch(() => {}));
+            await page.waitForTimeout(300);
+
+            // Método 1: Escreve no Clipboard e cola com Control+V
+            try {
+              await page.evaluate((textToPaste) => {
+                navigator.clipboard.writeText(textToPaste);
+              }, caption);
+              await page.keyboard.press('Control+v');
+              await page.waitForTimeout(800);
+            } catch { /* se clipboard falhar */ }
+
+            const currentText = (await captionBox.textContent().catch(() => '')) || '';
+            const hasCorrectTitle = currentText.toLowerCase().includes(titleSnippet.toLowerCase());
+            const hasCorrectLink = targetLink ? currentText.includes(targetLink) : currentText.length > 80;
+
+            if (currentText && hasCorrectTitle && hasCorrectLink) {
+              textConfirmed = true;
+              console.log(`[WA-PLAYWRIGHT] ✅ Legenda exata pareada com sucesso (tentativa ${attempt})!`);
+              break;
+            }
+
+            // Método 2 (Fallback): execCommand insertText
+            console.warn(`[WA-PLAYWRIGHT] ⚠️ Tentativa ${attempt}: legenda desalinhada. Re-inserindo via execCommand...`);
+            await captionBox.focus().catch(() => {});
+            await page.evaluate((textToInsert) => {
+              const activeEl = document.activeElement as HTMLElement;
+              if (activeEl) {
+                document.execCommand('insertText', false, textToInsert);
+              }
+            }, caption);
+            await page.waitForTimeout(800);
+
+            const fallbackText = (await captionBox.textContent().catch(() => '')) || '';
+            if (fallbackText && fallbackText.toLowerCase().includes(titleSnippet.toLowerCase())) {
+              textConfirmed = true;
+              console.log(`[WA-PLAYWRIGHT] ✅ Legenda validada via execCommand na tentativa ${attempt}!`);
+              break;
+            }
+          }
+
+          if (!textConfirmed) {
+            console.warn('[WA-PLAYWRIGHT] ⚠️ Digitação direta de segurança para parear a oferta...');
+            await captionBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
+            await page.keyboard.insertText(caption);
+            await page.waitForTimeout(1000);
+          }
+        } else {
+          console.warn('[WA-PLAYWRIGHT] ⚠️ Legenda do modal não localizada.');
         }
 
         // Clica no botão de enviar (ícone de avião/seta)
         const sendBtnSelectors = [
+          'div[role="dialog"] [data-icon="send"]',
+          'div[role="dialog"] [aria-label*="Enviar"]',
+          'div[role="dialog"] [aria-label*="Send"]',
           '[data-icon="send"]',
           '[aria-label*="Enviar"]',
-          '[aria-label*="Send"]',
-          'span[data-icon="send"]'
         ];
 
         let sentOk = false;
@@ -215,8 +302,24 @@ export async function sendOfferWithPhotoPlaywright(
           await page.keyboard.press('Enter');
         }
 
+        // Aguarda a destruição completa do modal de mídia antes de avançar
+        try {
+          await page.waitForSelector('div[role="dialog"]', { state: 'detached', timeout: 10000 });
+        } catch { /* ignorar */ }
+
+        // Esvazia os inputs de arquivo para não interferir na oferta subsequente
+        try {
+          const photoInput = page.locator('input[type="file"]').first();
+          if ((await photoInput.count()) > 0) {
+            await photoInput.setInputFiles([]).catch(() => {});
+          }
+        } catch { /* ignora */ }
+
         console.log(`[WA-PLAYWRIGHT] ✅ Foto + Oferta enviada no WhatsApp: "${offer.title.substring(0, 30)}..."`);
         if (existsSync(tempImgPath)) rmSync(tempImgPath);
+
+        // Pausa de segurança de 4s para o WhatsApp registrar a mensagem isolada
+        await page.waitForTimeout(4000);
         return true;
       } catch (err) {
         console.error('[WA-PLAYWRIGHT] Erro ao carregar foto, enviando apenas texto:', err);
@@ -241,3 +344,13 @@ export async function sendOfferWithPhotoPlaywright(
     return false;
   }
 }
+
+export function checkWhatsAppSessionStatus(): { connected: boolean; profileExists: boolean } {
+  const profileExists = existsSync(WA_PROFILE_DIR);
+  if (!profileExists) return { connected: false, profileExists: false };
+  const hasCookies = existsSync(join(WA_PROFILE_DIR, 'Default', 'Cookies')) || 
+                     existsSync(join(WA_PROFILE_DIR, 'Default', 'Network', 'Cookies')) ||
+                     existsSync(join(WA_PROFILE_DIR, 'Default', 'Storage'));
+  return { connected: hasCookies, profileExists };
+}
+

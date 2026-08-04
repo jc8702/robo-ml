@@ -711,7 +711,6 @@
           <span id="statusText">Verificando...</span>
         </div>
 
-        <a href="/qr" target="_blank" class="btn btn-secondary" style="text-decoration: none;">📱 Status QR Code / Conexão ↗</a>
         <button class="btn btn-warning" id="btnRunNow">⚡ Enviar Ofertas Agora</button>
         <button class="btn btn-primary" id="btnToggleBot">▶️ Iniciar Automação</button>
       </div>
@@ -719,15 +718,88 @@
 
     <!-- NAVEGAÇÃO POR ABAS -->
     <div class="tabs-nav">
-      <button class="tab-btn active" data-tab="tab-tree">🌳 Categorias & Subnichos</button>
+      <button class="tab-btn active" data-tab="tab-sessions">🔑 Conexões & Logins Locais</button>
+      <button class="tab-btn" data-tab="tab-tree">🌳 Categorias & Subnichos</button>
       <button class="tab-btn" data-tab="tab-filters">⚙️ Filtros & Agendamento</button>
       <button class="tab-btn" data-tab="tab-facebook">📘 Automação Facebook</button>
       <button class="tab-btn" data-tab="tab-instagram">📸 Automação Instagram</button>
       <button class="tab-btn" data-tab="tab-history">📸 Ofertas Enviadas</button>
     </div>
 
+    <!-- ABA 0: CONEXÕES & LOGINS LOCAIS -->
+    <div class="tab-pane active" id="tab-sessions">
+      <div class="card">
+        <div class="card-title">
+          <span>📱 Gerenciador de Sessões e Logins Locais (Navegador Chrome)</span>
+          <button class="btn btn-secondary" id="btnRefreshSessions" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;">🔄 Atualizar Status</button>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.5;">
+          O robô opera 100% na sua máquina local. Conecte suas contas do <b>WhatsApp</b>, <b>Facebook</b> e <b>Instagram</b> clicando nos botões abaixo para abrir a janela do Chrome local e efetuar o login.
+        </p>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+          <!-- CARD WHATSAPP -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-card); border-radius: 16px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; font-weight: 800; font-size: 1.1rem; color: #ffffff;">
+                  <span style="font-size: 1.4rem;">💬</span> WhatsApp Web
+                </div>
+                <div class="status-badge" id="badgeWaSession">
+                  <div class="status-dot" id="dotWaSession"></div>
+                  <span id="textWaSession">Verificando...</span>
+                </div>
+              </div>
+              <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 1rem;">
+                Abre o Chrome no WhatsApp Web para escaneamento do QR Code ou pareamento via número.
+              </p>
+            </div>
+            <button class="btn btn-primary" id="btnConnectWa" style="width: 100%;">🟢 Conectar / Logar WhatsApp</button>
+          </div>
+
+          <!-- CARD FACEBOOK -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-card); border-radius: 16px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; font-weight: 800; font-size: 1.1rem; color: #ffffff;">
+                  <span style="font-size: 1.4rem;">📘</span> Facebook Groups
+                </div>
+                <div class="status-badge" id="badgeFbSession">
+                  <div class="status-dot" id="dotFbSession"></div>
+                  <span id="textFbSession">Verificando...</span>
+                </div>
+              </div>
+              <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 1rem;">
+                Abre o Chrome no Facebook para realizar o login e salvar cookies de sessão no seu perfil local.
+              </p>
+            </div>
+            <button class="btn btn-fb" id="btnConnectFb" style="width: 100%;">📘 Conectar / Logar Facebook</button>
+          </div>
+
+          <!-- CARD INSTAGRAM -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-card); border-radius: 16px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; font-weight: 800; font-size: 1.1rem; color: #ffffff;">
+                  <span style="font-size: 1.4rem;">📸</span> Instagram Feed
+                </div>
+                <div class="status-badge" id="badgeIgSession">
+                  <div class="status-dot" id="dotIgSession"></div>
+                  <span id="textIgSession">Verificando...</span>
+                </div>
+              </div>
+              <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 1rem;">
+                Abre o Chrome no Instagram para efetuar login ou validar credenciais da conta.
+              </p>
+            </div>
+            <button class="btn btn-warning" id="btnConnectIg" style="width: 100%;">📸 Conectar / Logar Instagram</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ABA 1: ÁRVORE DE CATEGORIAS -->
-    <div class="tab-pane active" id="tab-tree">
+    <div class="tab-pane" id="tab-tree">
       <div class="card">
         <div class="card-title">
           <span>🌳 Árvore Completa de Categorias & Subcategorias Mercado Livre</span>
@@ -875,17 +947,24 @@
       <div class="card">
         <div class="card-title">
           <span>📸 Configurações da Automação de Alto Engajamento no Instagram</span>
-          <div style="display: flex; gap: 0.6rem;">
+          <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
             <button class="btn btn-warning" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnTestIg">📸 Testar Postagem Instagram</button>
+            <button class="btn btn-secondary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnTestIgAutoDm">💬 Testar Auto-DM (Comentários)</button>
             <button class="btn btn-primary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnSaveIgConfig">💾 Salvar Instagram</button>
           </div>
         </div>
 
-        <div style="margin-bottom: 1.5rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
           <label class="switch-label">
             <input type="checkbox" id="igEnabled" class="switch-input">
             <span class="switch-slider"></span>
-            <span>Ativar Publicação Automática no Feed do Instagram</span>
+            <span>Ativar Publicação Automática no Feed</span>
+          </label>
+
+          <label class="switch-label">
+            <input type="checkbox" id="igAutoDmEnabled" class="switch-input">
+            <span class="switch-slider"></span>
+            <span>🤖 Ativar Auto-DM por Comentário ("ManyChat" Local)</span>
           </label>
         </div>
 
@@ -905,6 +984,16 @@
             <input type="number" id="igMaxPostsPerCycle" value="3">
           </div>
 
+          <div class="field">
+            <label for="igTriggerWord">Palavra-Chave Gatilho (ex: PASSE, OFERTA, LINK):</label>
+            <input type="text" id="igTriggerWord" placeholder="PASSE">
+          </div>
+
+          <div class="field" style="grid-column: span 2;">
+            <label for="igDmTemplate">Template da Mensagem no Direct (DM):</label>
+            <input type="text" id="igDmTemplate" placeholder="Olá! Aqui está o seu link com desconto exclusivo para {title}: {link} 🎁">
+          </div>
+
           <div class="field" style="grid-column: span 2;">
             <label for="igBioLink">Link Promocional para CTA (Mencionado na Legenda como Link da Bio):</label>
             <input type="text" id="igBioLink" placeholder="https://chat.whatsapp.com/SeuGrupoVIP ou linktr.ee/seuPerfil">
@@ -917,10 +1006,10 @@
         </div>
 
         <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); padding: 1rem; border-radius: 10px; font-size: 0.85rem; color: #bae6fd;">
-          💡 <strong>Como Funciona a Distribuição Orgânica no Instagram:</strong><br>
-          • As postagens usam ganchos visuais e copys otimizadas para reter a atenção do usuário no feed.<br>
-          • As legendas contêm a instrução <em>"Comente OFERTA para receber o link"</em> e direcionamento para o link da sua Bio.<br>
-          • Para autenticar a sua conta no Instagram Web, clique duas vezes no arquivo <strong>"Conectar-Instagram.bat"</strong> na raiz do seu robô e faça login visualmente 1 única vez.
+          💡 <strong>Como Funciona a Automação de Comentários & Direct ("ManyChat"):</strong><br>
+          • As legendas incentivam o usuário a comentar a palavra-chave configurada (ex: <em>"PASSE"</em>).<br>
+          • O robô monitora os posts, identifica o comentário e envia uma mensagem privada no Direct (DM) com o link oficial de afiliado.<br>
+          • Além do Direct, o robô responde publicamente ao comentário do usuário, impulsionando o engajamento orgânico do post.
         </div>
       </div>
     </div>
@@ -1370,6 +1459,9 @@
           if (data.igMaxPostsPerCycle !== undefined) document.getElementById('igMaxPostsPerCycle').value = data.igMaxPostsPerCycle;
           if (data.igBioLink) document.getElementById('igBioLink').value = data.igBioLink;
           if (data.igCustomHashtags) document.getElementById('igCustomHashtags').value = data.igCustomHashtags;
+          if (data.igAutoDmEnabled !== undefined) document.getElementById('igAutoDmEnabled').checked = !!data.igAutoDmEnabled;
+          if (data.igTriggerWord) document.getElementById('igTriggerWord').value = data.igTriggerWord;
+          if (data.igDmTemplate) document.getElementById('igDmTemplate').value = data.igDmTemplate;
 
           updateStatus(!!data.isRunning);
           log('✅ Configurações carregadas do banco de dados Neon PostgreSQL.');
@@ -1403,6 +1495,9 @@
         igMaxPostsPerCycle: parseInt(document.getElementById('igMaxPostsPerCycle').value, 10) || 3,
         igBioLink: document.getElementById('igBioLink').value.trim(),
         igCustomHashtags: document.getElementById('igCustomHashtags').value.trim(),
+        igAutoDmEnabled: document.getElementById('igAutoDmEnabled').checked,
+        igTriggerWord: document.getElementById('igTriggerWord').value.trim(),
+        igDmTemplate: document.getElementById('igDmTemplate').value.trim(),
       };
 
       try {
@@ -1495,6 +1590,7 @@
             password: document.getElementById('igPassword').value.trim(),
             bioLink: document.getElementById('igBioLink').value.trim(),
             hashtags: document.getElementById('igCustomHashtags').value.trim(),
+            triggerWord: document.getElementById('igTriggerWord').value.trim(),
           };
           const res = await fetch('/api/bot/test-instagram', {
             method: 'POST',
@@ -1509,6 +1605,37 @@
         } finally {
           btnTestIg.disabled = false;
           btnTestIg.textContent = '📸 Testar Postagem Instagram';
+        }
+      });
+    }
+
+    const btnTestIgAutoDm = document.getElementById('btnTestIgAutoDm');
+    if (btnTestIgAutoDm) {
+      btnTestIgAutoDm.addEventListener('click', async () => {
+        log('💬 Salvando e verificando comentários do Instagram para Auto-DM...');
+        btnTestIgAutoDm.disabled = true;
+        btnTestIgAutoDm.textContent = '⏳ Verificando Comentários & Direct...';
+        try {
+          await saveAllConfig();
+          const payload = {
+            username: document.getElementById('igUsername').value.trim(),
+            password: document.getElementById('igPassword').value.trim(),
+            triggerWord: document.getElementById('igTriggerWord').value.trim(),
+            dmTemplate: document.getElementById('igDmTemplate').value.trim(),
+          };
+          const res = await fetch('/api/bot/test-instagram-autodm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          log(data.message);
+          showToast(data.message, data.success ? 'success' : 'error');
+        } catch (err) {
+          showToast('Erro ao testar Auto-DM do Instagram', 'error');
+        } finally {
+          btnTestIgAutoDm.disabled = false;
+          btnTestIgAutoDm.textContent = '💬 Testar Auto-DM (Comentários)';
         }
       });
     }
@@ -1550,9 +1677,80 @@
       }
     });
 
+    // GERENCIAMENTO DE SESSÕES LOCAIS
+    async function loadSessionsStatus() {
+      try {
+        const res = await fetch('/api/sessions/status');
+        if (res.ok) {
+          const status = await res.json();
+          updateSessionBadge('Wa', status.wa);
+          updateSessionBadge('Fb', status.fb);
+          updateSessionBadge('Ig', status.ig);
+        }
+      } catch (err) {
+        console.error('Erro ao verificar status das sessões:', err);
+      }
+    }
+
+    function updateSessionBadge(platform, statusObj) {
+      const dot = document.getElementById('dot' + platform + 'Session');
+      const text = document.getElementById('text' + platform + 'Session');
+      if (!dot || !text) return;
+
+      if (statusObj && statusObj.connected) {
+        dot.className = 'status-dot active';
+        text.textContent = 'Sessão Conectada';
+      } else if (statusObj && statusObj.profileExists) {
+        dot.className = 'status-dot';
+        text.textContent = 'Perfil Criado';
+      } else {
+        dot.className = 'status-dot';
+        text.textContent = 'Não Conectado';
+      }
+    }
+
+    const btnConnectWa = document.getElementById('btnConnectWa');
+    if (btnConnectWa) {
+      btnConnectWa.addEventListener('click', async () => {
+        showToast('Abrindo janela do Chrome para login no WhatsApp...', 'info');
+        log('💬 Disparando conector local do WhatsApp...');
+        await fetch('/api/sessions/connect-wa', { method: 'POST' });
+        setTimeout(loadSessionsStatus, 4000);
+      });
+    }
+
+    const btnConnectFb = document.getElementById('btnConnectFb');
+    if (btnConnectFb) {
+      btnConnectFb.addEventListener('click', async () => {
+        showToast('Abrindo janela do Chrome para login no Facebook...', 'info');
+        log('📘 Disparando conector local do Facebook...');
+        await fetch('/api/sessions/connect-fb', { method: 'POST' });
+        setTimeout(loadSessionsStatus, 4000);
+      });
+    }
+
+    const btnConnectIg = document.getElementById('btnConnectIg');
+    if (btnConnectIg) {
+      btnConnectIg.addEventListener('click', async () => {
+        showToast('Abrindo janela do Chrome para login no Instagram...', 'info');
+        log('📸 Disparando conector local do Instagram...');
+        await fetch('/api/sessions/connect-ig', { method: 'POST' });
+        setTimeout(loadSessionsStatus, 4000);
+      });
+    }
+
+    const btnRefreshSessions = document.getElementById('btnRefreshSessions');
+    if (btnRefreshSessions) {
+      btnRefreshSessions.addEventListener('click', () => {
+        loadSessionsStatus();
+        showToast('Status das sessões atualizado!', 'success');
+      });
+    }
+
     // INICIALIZAÇÃO
     loadConfig();
     loadHistory();
+    loadSessionsStatus();
   </script>
 </body>
 </html>

@@ -25,11 +25,14 @@ export function findBrowserPath(): string | undefined {
     // Playwright Chromium (Windows)
     const pwDir = join(homeDir, 'AppData', 'Local', 'ms-playwright');
     if (existsSync(pwDir)) {
-      const dirs = readdirSync(pwDir)
-        .filter((d: string) => d.startsWith('chromium'))
-        .sort();
-      for (const dir of dirs.reverse()) {
-        candidates.push(join(pwDir, dir, 'chrome-win', 'chrome.exe'));
+      try {
+        const dirs = readdirSync(pwDir)
+          .filter((d: string) => d.startsWith('chromium'))
+          .sort();
+        for (const dir of dirs.reverse()) candidates.push(join(pwDir, dir, 'chrome-win', 'chrome.exe'));
+      } catch {
+        // O diretório pode existir, mas estar protegido pelo sandbox/antivírus.
+        // Nesse caso, continua procurando o Chrome instalado no sistema.
       }
     }
     candidates.push(

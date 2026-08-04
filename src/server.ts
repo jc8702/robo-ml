@@ -1,12 +1,17 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
-import { exec } from 'node:child_process';
+import { exec, execSync } from 'node:child_process';
 import { loadConfig, loadConfigAsync, type AppConfig } from './config/settings.js';
 import { runAutomaticCycle, startScheduler, stopScheduler } from './scheduler/cron.js';
 import { dbSaveMultipleSettings, dbGetSettings, initDb } from './db/index.js';
 import { currentPairingCode, pairingCodeRequestedAt, currentQrRaw } from './whatsapp/client.js';
 import { getSentOffersHistoryFromDb } from './collector/history.js';
+import { checkWhatsAppSessionStatus, ensureWhatsAppLoggedIn } from './whatsapp/wa-playwright.js';
+import { checkFacebookSessionStatus, openFacebookBrowser } from './facebook/fb-poster.js';
+import { checkInstagramSessionStatus, openInstagramBrowser } from './instagram/ig-poster.js';
+
+
 
 // initDb sera chamado apos o servidor subir (ver callback do listen abaixo)
 
@@ -244,6 +249,9 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       igMaxPostsPerCycle: config.instagram.maxPostsPerCycle,
       igBioLink: config.instagram.bioLink,
       igCustomHashtags: config.instagram.customHashtags,
+      igAutoDmEnabled: config.instagram.autoDmEnabled,
+      igTriggerWord: config.instagram.triggerWord,
+      igDmTemplate: config.instagram.dmTemplate,
     });
   }
 
@@ -277,6 +285,9 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       if (body.igMaxPostsPerCycle !== undefined && body.igMaxPostsPerCycle !== '') updates.INSTAGRAM_MAX_POSTS_PER_CYCLE = String(body.igMaxPostsPerCycle);
       if (typeof body.igBioLink === 'string') updates.INSTAGRAM_BIO_LINK = body.igBioLink.trim();
       if (typeof body.igCustomHashtags === 'string') updates.INSTAGRAM_HASHTAGS = body.igCustomHashtags.trim();
+      if (body.igAutoDmEnabled !== undefined) updates.INSTAGRAM_AUTO_DM = body.igAutoDmEnabled ? 'true' : 'false';
+      if (typeof body.igTriggerWord === 'string' && body.igTriggerWord.trim()) updates.INSTAGRAM_TRIGGER_WORD = body.igTriggerWord.trim().toUpperCase();
+      if (typeof body.igDmTemplate === 'string' && body.igDmTemplate.trim()) updates.INSTAGRAM_DM_TEMPLATE = body.igDmTemplate.trim();
 
       // 1. Grava no Neon PostgreSQL
       await dbSaveMultipleSettings(updates);
@@ -314,8 +325,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
   if (method === 'POST' && (url === '/api/bot/start' || url.endsWith('/start'))) {
     if (!isBotRunning) {
       isBotRunning = true;
+      await dbSaveMultipleSettings({ AUTO_BOT_RUNNING: 'true' }).catch(() => {});
+      process.env.AUTO_BOT_RUNNING = 'true';
       const config = await loadConfigAsync();
-      await startScheduler(config).catch((err) => console.error('Erro ao iniciar agendador:', err));
+      startScheduler(config).catch((err) => console.error('Erro ao iniciar agendador:', err));
     }
     return sendJson({ isRunning: true, message: '⚡ Automação iniciada com sucesso! O robô executará nos horários agendados.' });
   }
@@ -323,6 +336,8 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
   // POST /api/bot/stop
   if (method === 'POST' && (url === '/api/bot/stop' || url.endsWith('/stop'))) {
     isBotRunning = false;
+    await dbSaveMultipleSettings({ AUTO_BOT_RUNNING: 'false' }).catch(() => {});
+    process.env.AUTO_BOT_RUNNING = 'false';
     stopScheduler();
     return sendJson({ isRunning: false, message: '⏸️ Automação pausada e agendador cancelado.' });
   }
@@ -350,6 +365,7 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       const password = (body.password || config.instagram.password || process.env.INSTAGRAM_PASSWORD || '').trim();
       const bioLink = (body.bioLink || config.instagram.bioLink || '').trim();
       const hashtags = (body.hashtags || config.instagram.customHashtags || '').trim();
+      const triggerWord = (body.triggerWord || config.instagram.triggerWord || 'PASSE').trim();
 
       const history = await getSentOffersHistoryFromDb();
       const testOffer: any = history.length > 0 ? {
@@ -386,6 +402,7 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
         hashtags,
         username,
         password,
+        triggerWord,
       });
 
       if (result.success) {
@@ -400,7 +417,72 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
     }
   }
 
+  // POST /api/bot/test-instagram-autodm - Teste isolado do monitor de comentários e resposta de Auto-DM
+  if (method === 'POST' && (url === '/api/bot/test-instagram-autodm' || url.endsWith('/test-instagram-autodm'))) {
+    try {
+      const body = await parseJsonBody(req).catch(() => ({}));
+      const config = await loadConfigAsync();
+      const { checkAndReplyInstagramComments } = await import('./instagram/ig-auto-reply.js');
 
+      console.log('[SERVER] 💬 Disparando teste do monitor de comentários e Auto-DM do Instagram...');
+      const resAuto = await checkAndReplyInstagramComments({
+        triggerWord: body.triggerWord || config.instagram.triggerWord,
+        dmTemplate: body.dmTemplate || config.instagram.dmTemplate,
+        username: body.username || config.instagram.username,
+        password: body.password || config.instagram.password,
+      });
+
+      const sendFailed = resAuto.repliesCount === 0 && resAuto.errors.some((error) => /Direct|autenticada|login|não localizado|não apareceu/i.test(error));
+      return sendJson({
+        success: !sendFailed,
+        message: `🤖 Verificação concluída! ${resAuto.commentsScanned} comentário(s) lido(s), ${resAuto.repliesCount} Direct(s) enviado(s). Palavra: ${resAuto.triggerWord || 'configurada'}.`,
+        details: resAuto,
+      }, sendFailed ? 502 : 200);
+    } catch (err) {
+      console.error('[SERVER] Erro no teste de Auto-DM:', err);
+      return sendJson({ success: false, message: 'Erro ao executar teste de Auto-DM: ' + String(err) }, 500);
+    }
+  }
+
+
+
+  // GET /api/sessions/status - Retorna o status de conexão local de cada rede
+  if (method === 'GET' && (url === '/api/sessions/status' || url.endsWith('/sessions/status'))) {
+    return sendJson({
+      wa: checkWhatsAppSessionStatus(),
+      fb: checkFacebookSessionStatus(),
+      ig: checkInstagramSessionStatus(),
+    });
+  }
+
+  // POST /api/sessions/connect-wa - Abre conector local do WhatsApp
+  if (method === 'POST' && (url === '/api/sessions/connect-wa' || url.endsWith('/connect-wa'))) {
+    console.log('[SERVER] 🟢 Disparando abertura do Chrome para login no WhatsApp...');
+    ensureWhatsAppLoggedIn().catch((err) => console.error('[SERVER] Erro no WhatsApp:', err));
+    return sendJson({ success: true, message: '🟢 Janela do Chrome aberta para login no WhatsApp!' });
+  }
+
+  // POST /api/sessions/connect-fb - Abre conector local do Facebook
+  if (method === 'POST' && (url === '/api/sessions/connect-fb' || url.endsWith('/connect-fb'))) {
+    console.log('[SERVER] 📘 Disparando abertura do Chrome para login no Facebook...');
+    openFacebookBrowser().then(async (ctx) => {
+      const pages = ctx.pages();
+      const page = pages.length > 0 ? pages[0] : await ctx.newPage();
+      await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' });
+    }).catch((err) => console.error('[SERVER] Erro no Facebook:', err));
+    return sendJson({ success: true, message: '📘 Janela do Chrome aberta para login no Facebook!' });
+  }
+
+  // POST /api/sessions/connect-ig - Abre conector local do Instagram
+  if (method === 'POST' && (url === '/api/sessions/connect-ig' || url.endsWith('/connect-ig'))) {
+    console.log('[SERVER] 📸 Disparando abertura do Chrome para login no Instagram...');
+    openInstagramBrowser().then(async (ctx) => {
+      const pages = ctx.pages();
+      const page = pages.length > 0 ? pages[0] : await ctx.newPage();
+      await page.goto('https://www.instagram.com', { waitUntil: 'domcontentloaded' });
+    }).catch((err) => console.error('[SERVER] Erro no Instagram:', err));
+    return sendJson({ success: true, message: '📸 Janela do Chrome aberta para login no Instagram!' });
+  }
 
   // Fallback 404
   res.writeHead(404);
@@ -409,7 +491,49 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
 
 const server = createServer(handleRequest);
 
-// --- Handlers de exceção global para resiliência 24/7 ---
+// Trata EADDRINUSE automaticamente liberando a porta 3000 se ocupada
+server.on('error', (err: any) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`[AVISO] Porta ${PORT} em uso. Liberando porta ${PORT}...`);
+    try {
+      if (process.platform === 'win32') {
+        execSync(`for /f "tokens=5" %a in ('netstat -aon ^| findstr :${PORT} ^| findstr LISTENING') do taskkill /f /pid %a`, { stdio: 'ignore' });
+      }
+    } catch {}
+    setTimeout(() => {
+      server.listen(PORT, '0.0.0.0', startServerCallback);
+    }, 1000);
+  } else {
+    console.error('[FATAL] Erro no servidor HTTP:', err);
+  }
+});
+
+async function startServerCallback() {
+  console.log('\n======================================================');
+  console.log(`Painel de Controle ML Ofertas Bot rodando em:`);
+  console.log(`  http://localhost:${PORT}`);
+  console.log('======================================================\n');
+
+  // Inicializa banco de dados apos o servidor estar no ar
+  await initDb().catch(console.error);
+
+  // Abre navegador padrao automaticamente no Windows se for execucao local CLI
+  if (process.argv.includes('--open')) {
+    const openCmd = process.platform === 'win32' ? `start http://localhost:${PORT}` : `open http://localhost:${PORT}`;
+    exec(openCmd, () => {});
+  }
+
+  // Auto-inicia o bot se estiver marcado como ativo no Neon DB ou RENDER/AUTO_START
+  const dbSettings = (await dbGetSettings().catch(() => ({}))) as Record<string, string>;
+  if (dbSettings.AUTO_BOT_RUNNING === 'true' || process.env.AUTO_BOT_RUNNING === 'true' || process.env.RENDER || process.env.AUTO_START === 'true') {
+    console.log('[BOT] Restaurando estado ativo do bot de ofertas (24/7)...');
+    isBotRunning = true;
+    const config = await loadConfigAsync();
+    startScheduler(config).catch((err) => console.error('Erro ao iniciar agendador:', err));
+  }
+}
+
+// Handlers de exceção global para resiliência 24/7
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] uncaughtException:', err);
 });
@@ -420,31 +544,7 @@ process.on('unhandledRejection', (reason) => {
 
 // Inicia o servidor (local ou Render)
 if (process.env.VERCEL !== '1') {
-  // CRÍTICO: Render exige bind em 0.0.0.0, não em localhost
-  server.listen(PORT, '0.0.0.0', async () => {
-    const url = `http://0.0.0.0:${PORT}`;
-    console.log('\n======================================================');
-    console.log(`Painel de Controle ML Ofertas Bot rodando em:`);
-    console.log(`  http://localhost:${PORT}`);
-    console.log('======================================================\n');
-
-    // Inicializa banco de dados apos o servidor estar no ar
-    await initDb().catch(console.error);
-
-    // Abre navegador padrao automaticamente no Windows se for execucao local CLI
-    if (process.argv.includes('--open')) {
-      const openCmd = process.platform === 'win32' ? `start http://localhost:${PORT}` : `open http://localhost:${PORT}`;
-      exec(openCmd, () => {});
-    }
-
-    // Auto-inicia o bot no Render (ou se AUTO_START=true)
-    if (process.env.RENDER || process.env.AUTO_START === 'true') {
-      console.log('[BOT] Auto-iniciando bot de ofertas...');
-      isBotRunning = true;
-      const config = loadConfig();
-      startScheduler(config).catch((err) => console.error('Erro ao iniciar agendador:', err));
-    }
-  });
+  server.listen(PORT, '0.0.0.0', startServerCallback);
 }
 
 export default handleRequest;

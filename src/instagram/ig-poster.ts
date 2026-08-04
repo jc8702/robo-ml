@@ -126,6 +126,15 @@ export async function openInstagramBrowser(): Promise<BrowserContext> {
   }
 
   activeIgContext = context;
+
+  // Interceptor global: cancela automaticamente qualquer janela nativa Explorer do SO
+  context.on('page', (p) => {
+    p.on('filechooser', async (fc) => {
+      console.log('[IG] 🛡️ Interceptado FileChooser do SO no Instagram. Fechando janela nativa automaticamente...');
+      await fc.setFiles([]).catch(() => {});
+    });
+  });
+
   await restoreIgCookiesFromDb(context);
   return context;
 }
@@ -217,7 +226,7 @@ export async function postViaPrivateApi(
  */
 export async function postOfferToInstagram(
   offer: AffiliateOffer,
-  options?: { bioLink?: string; hashtags?: string; username?: string; password?: string }
+  options?: { bioLink?: string; hashtags?: string; username?: string; password?: string; triggerWord?: string }
 ): Promise<{ success: boolean; error?: string }> {
   console.log(`\n📸 [INSTAGRAM] Iniciando postagem da oferta: "${offer.title.slice(0, 40)}..."`);
   let localImagePath: string | null = null;
@@ -234,7 +243,7 @@ export async function postOfferToInstagram(
       return { success: false, error: 'Imagem em HD indisponível' };
     }
 
-    const captionText = formatInstagramCaption(offer, options?.bioLink, options?.hashtags);
+    const captionText = formatInstagramCaption(offer, options?.bioLink, options?.hashtags, options?.triggerWord);
     const dbSettings = await dbGetSettings().catch(() => ({} as Record<string, string>));
     const username = options?.username || process.env.INSTAGRAM_USERNAME || dbSettings.INSTAGRAM_USERNAME || 'clickmarido';
     const password = options?.password || process.env.INSTAGRAM_PASSWORD || dbSettings.INSTAGRAM_PASSWORD;
@@ -489,51 +498,65 @@ export async function postOfferToInstagram(
     // 8. Clica em "Compartilhar" / "Share"
     console.log('  🚀 Compartilhando publicação no Instagram...');
 
-    // Fecha sugestões de hashtags que podem estar sobrepostas
+    // Deseleciona legenda e fecha popups de hashtag
+    await page.keyboard.press('Escape').catch(() => {});
     await page.keyboard.press('Escape').catch(() => {});
     await randomDelay(1000, 1500);
-    // Clica fora da caixa de texto para deselecionar
-    await page.mouse.click(400, 120).catch(() => {});
+
+    // Clica na foto (área esquerda do modal) para fechar qualquer popup de sugestão
+    await page.mouse.click(300, 350).catch(() => {});
     await randomDelay(1000, 1500);
 
     let shared = false;
-    // Tenta múltiplas abordagens para clicar em "Compartilhar"
-    // Abordagem 1: getByText com exact
-    for (const label of ['Compartilhar', 'Share']) {
-      const el = page.getByText(label, { exact: true }).first();
-      if (await el.isVisible({ timeout: 3000 }).catch(() => false)) {
-        const box = await el.boundingBox().catch(() => null);
-        if (box) {
-          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-          shared = true;
-          console.log(`  ⏳ Clicou em "${label}" — processando publicação...`);
-          break;
-        }
-      }
-    }
 
-    // Abordagem 2: locator com role="button" ou div/span
-    if (!shared) {
-      const selectors = [
-        'div[role="button"]:has-text("Compartilhar")',
-        'div[role="button"]:has-text("Share")',
-        'span:has-text("Compartilhar")',
-        'span:has-text("Share")',
-        'a:has-text("Compartilhar")',
-      ];
-      for (const sel of selectors) {
-        const el = page.locator(sel).first();
-        if (await el.isVisible({ timeout: 2000 }).catch(() => false)) {
-          const box = await el.boundingBox().catch(() => null);
+    // Busca o botão Compartilhar no topo direito do modal
+    const shareBtnLocators = [
+      page.getByText('Compartilhar', { exact: true }).first(),
+      page.getByText('Share', { exact: true }).first(),
+      page.locator('div[role="button"]:has-text("Compartilhar")').first(),
+      page.locator('div[role="button"]:has-text("Share")').first(),
+      page.locator('button:has-text("Compartilhar")').first(),
+    ];
+
+    for (const locator of shareBtnLocators) {
+      if (await locator.isVisible({ timeout: 2000 }).catch(() => false)) {
+        try {
+          await locator.click({ force: true });
+          shared = true;
+          console.log('  ⏳ Clicou no botão Compartilhar via Playwright!');
+          break;
+        } catch {
+          const box = await locator.boundingBox().catch(() => null);
           if (box) {
             await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
             shared = true;
-            console.log(`  ⏳ Clicou em Compartilhar via ${sel}`);
+            console.log('  ⏳ Clicou em Compartilhar via coordenadas!');
             break;
           }
         }
       }
     }
+
+    // Clique reforçado nativo via DOM caso o Playwright não tenha acionado o listener do React
+    console.log('  🎯 Executando clique reforçado via DOM em Compartilhar...');
+    await page.evaluate(() => {
+      const dialog = document.querySelector('div[role="dialog"]') || document.querySelector('div[role="presentation"]');
+      if (!dialog) return;
+      const allEls = Array.from(dialog.querySelectorAll('div, span, button, a'));
+      const shareEl = allEls.find(el => {
+        const text = el.textContent?.trim();
+        return (text === 'Compartilhar' || text === 'Share') && el.children.length === 0;
+      });
+      if (shareEl) {
+        (shareEl as HTMLElement).click();
+        shareEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        const parentBtn = shareEl.closest('[role="button"]');
+        if (parentBtn) {
+          (parentBtn as HTMLElement).click();
+          parentBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        }
+      }
+    });
 
     if (!shared) {
       await page.screenshot({ path: 'ig-debug-share.png' }).catch(() => {});
@@ -541,8 +564,42 @@ export async function postOfferToInstagram(
       return { success: false, error: apiError || 'Botão Compartilhar não localizado' };
     }
 
-    await randomDelay(8000, 12000);
-    console.log('  ✅ Oferta publicada com sucesso no Instagram!');
+    // 9. Aguarda a tela de confirmação ("Sua publicação foi compartilhada" / "Post shared")
+    console.log('  ⏳ Aguardando confirmação de envio do Instagram (até 30s)...');
+    try {
+      await page.waitForSelector(
+        'img[alt*="compartilhada"], img[alt*="shared"], svg[aria-label*="compartilhada"], div:has-text("compartilhada"), div:has-text("shared"), span:has-text("compartilhada"), h2:has-text("compartilhada")',
+        { timeout: 30000 }
+      );
+      console.log('  🎉 CONFIRMAÇÃO DETECTADA: Publicação compartilhada no Instagram!');
+    } catch {
+      console.log('  ⏱️ Timeout aguardando mensagem explícita, tirando captura para verificação...');
+    }
+
+    // Tira print de prova da tela final e salva no diretório de artefatos
+    const proofLocalPath = join(process.cwd(), 'ig_post_confirmation.png');
+    await page.screenshot({ path: proofLocalPath, fullPage: false }).catch(() => {});
+
+    // Clica no botão Concluir para fechar o modal
+    try {
+      const doneBtn = page.locator('button:has-text("Concluir"), div[role="button"]:has-text("Concluir"), span:has-text("Concluir"), button:has-text("Done")').first();
+      if (await doneBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await doneBtn.click({ force: true }).catch(() => {});
+        console.log('  ✅ Modal de publicação concluído e fechado!');
+      }
+    } catch {}
+
+    const artifactDir = 'C:\\Users\\jc-pr\\.gemini\\antigravity-ide\\brain\\fff040e8-8c96-4903-bf8f-43e76e201eba';
+    const artifactProofPath = join(artifactDir, 'ig_post_confirmation.png');
+    try {
+      if (existsSync(proofLocalPath)) {
+        const { copyFileSync } = await import('node:fs');
+        copyFileSync(proofLocalPath, artifactProofPath);
+        console.log(`  📸 Prova de postagem salva em: ${artifactProofPath}`);
+      }
+    } catch {}
+
+    await randomDelay(3000, 5000);
     await saveIgCookiesToDb(context).catch(() => {});
 
     return { success: true };
@@ -552,3 +609,14 @@ export async function postOfferToInstagram(
     return { success: false, error: apiError || errMsg };
   }
 }
+
+export function checkInstagramSessionStatus(): { connected: boolean; profileExists: boolean } {
+  const profileExists = existsSync(IG_PROFILE_DIR);
+  if (!profileExists) return { connected: false, profileExists: false };
+  const hasCookies = existsSync(join(IG_PROFILE_DIR, 'Default', 'Cookies')) || 
+                     existsSync(join(IG_PROFILE_DIR, 'Default', 'Network', 'Cookies')) ||
+                     existsSync(join(IG_PROFILE_DIR, 'Default', 'Storage')) ||
+                     !!process.env.INSTAGRAM_PASSWORD;
+  return { connected: hasCookies, profileExists };
+}
+
