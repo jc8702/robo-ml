@@ -42,6 +42,46 @@ function cleanProfileLock(profileDir: string) {
 
 let activeIgContext: BrowserContext | null = null;
 
+import { getDbPool } from '../db/index.js';
+
+export async function restoreIgCookiesFromDb(context: BrowserContext): Promise<boolean> {
+  const db = getDbPool();
+  if (!db) return false;
+  try {
+    const res = await db.query("SELECT value FROM app_settings WHERE key = 'IG_COOKIES_JSON'");
+    if (res.rows.length > 0 && res.rows[0].value) {
+      const cookies = JSON.parse(res.rows[0].value);
+      if (Array.isArray(cookies) && cookies.length > 0) {
+        await context.addCookies(cookies);
+        console.log(`[IG] 🔑 ${cookies.length} cookie(s) do Instagram restaurados do Neon PostgreSQL.`);
+        return true;
+      }
+    }
+  } catch (err) {
+    console.error('[IG] Erro ao restaurar cookies do DB:', err);
+  }
+  return false;
+}
+
+export async function saveIgCookiesToDb(context: BrowserContext): Promise<void> {
+  const db = getDbPool();
+  if (!db) return;
+  try {
+    const cookies = await context.cookies('https://www.instagram.com');
+    if (cookies && cookies.length > 0) {
+      const json = JSON.stringify(cookies);
+      await db.query(
+        `INSERT INTO app_settings (key, value) VALUES ('IG_COOKIES_JSON', $1)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [json]
+      );
+      console.log(`[IG] 💾 ${cookies.length} cookie(s) do Instagram salvos no Neon PostgreSQL.`);
+    }
+  } catch (err) {
+    console.error('[IG] Erro ao salvar cookies no DB:', err);
+  }
+}
+
 export async function openInstagramBrowser(): Promise<BrowserContext> {
   if (activeIgContext && activeIgContext.pages().length > 0) {
     try {
@@ -75,18 +115,19 @@ export async function openInstagramBrowser(): Promise<BrowserContext> {
     contextOptions.executablePath = executablePath;
   }
 
+  let context: BrowserContext;
   try {
-    const context = await chromium.launchPersistentContext(IG_PROFILE_DIR, contextOptions);
-    activeIgContext = context;
-    return context;
+    context = await chromium.launchPersistentContext(IG_PROFILE_DIR, contextOptions);
   } catch (launchErr) {
     console.warn('[IG] Aviso ao abrir com Chrome do sistema. Tentando expurgar lock e relançar...', launchErr);
     cleanProfileLock(IG_PROFILE_DIR);
     delete contextOptions.executablePath;
-    const context = await chromium.launchPersistentContext(IG_PROFILE_DIR, contextOptions);
-    activeIgContext = context;
-    return context;
+    context = await chromium.launchPersistentContext(IG_PROFILE_DIR, contextOptions);
   }
+
+  activeIgContext = context;
+  await restoreIgCookiesFromDb(context);
+  return context;
 }
 
 function randomDelay(minMs = 1500, maxMs = 3500): Promise<void> {
@@ -425,6 +466,7 @@ export async function postOfferToInstagram(
 
     await randomDelay(8000, 12000);
     console.log('  ✅ Oferta publicada com sucesso no Instagram!');
+    await saveIgCookiesToDb(context).catch(() => {});
 
     return true;
   } catch (err) {
