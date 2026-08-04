@@ -6,6 +6,9 @@
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
 - **Última Atualização:** 04/08/2026 - 01:19
 
+- **04/08/2026 - 04:05:** **Ativação Padrão da Automação 24/7 do Instagram (`.env` e Neon PostgreSQL):**
+  - Sincronizadas as variáveis `INSTAGRAM_ENABLED=true`, `INSTAGRAM_USERNAME=gc19ofertass`, `INSTAGRAM_MAX_POSTS_PER_CYCLE=3`, `INSTAGRAM_BIO_LINK` e `INSTAGRAM_HASHTAGS` no arquivo `.env` e na tabela `app_settings` do banco Neon DB.
+  - O Instagram passa a fazer parte da esteira padrão em todas as varreduras agendadas (Cron) sem necessidade de configuração manual pós-deploy.
 - **04/08/2026 - 04:00:** **Correção do Anexo de Imagem no WhatsApp Web (`src/whatsapp/wa-playwright.ts`):**
   - Atualizada a seleção do campo `input[type="file"]` para interagir com elementos ocultos pelo CSS do WhatsApp Web sem expirar por timeout de visibilidade.
   - Adicionado expurgo preventivo de locks de navegador concorrentes antes de iniciar novos disparos manuais.
