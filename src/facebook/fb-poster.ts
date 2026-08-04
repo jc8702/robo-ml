@@ -506,75 +506,81 @@ async function postToFacebookGroup(
     // Espera publicação processar
     await randomDelay(3000, 5000);
 
-    // 4. ENVIA O PRIMEIRO COMENTÁRIO FIXADO COM O LINK DO GRUPO DO WHATSAPP
+    // 4. ENVIA O PRIMEIRO COMENTÁRIO EXCLUSIVAMENTE NA PUBLICAÇÃO QUE FOI ENVIADA AGORA
     try {
-      console.log('  💬 Enviando 1º comentário com o link do grupo do WhatsApp...');
+      console.log('  💬 Localizando a postagem criada para inserir o 1º comentário...');
       await randomDelay(2000, 3500);
 
-      const waCommentText = formatFacebookWaComment(waGroupLink);
-
-      // Encontra o campo de comentário da publicação no feed
-      const commentBoxSelectors = [
-        'div[role="article"] [contenteditable="true"]',
-        'div[role="article"] [role="textbox"]',
-        'form [contenteditable="true"]',
-        'div[aria-label*="comentário"][contenteditable="true"]',
-        'div[aria-label*="Escreva um comentário"][contenteditable="true"]',
-        'div[aria-label*="Write a comment"][contenteditable="true"]',
-        'div[contenteditable="true"][aria-label*="comentar"]',
-      ];
-
-      let commentBox = null;
-      for (const sel of commentBoxSelectors) {
-        try {
-          const el = page.locator(sel).first();
-          if (await el.isVisible({ timeout: 3000 })) {
-            commentBox = el;
-            break;
-          }
-        } catch { /* próximo */ }
+      // Verificação de post pendente para aprovação dos moderadores do grupo
+      const pendingApproval = page.locator('text="aprovação", text="pendente", text="pending approval"');
+      if (await pendingApproval.isVisible({ timeout: 1500 }).catch(() => false)) {
+        console.log('  ℹ️ O post foi enviado para a fila de aprovação dos administradores do grupo. (Comentário será adicionado após aprovação)');
+        return true;
       }
 
-      if (commentBox) {
-        await commentBox.click();
-        await randomDelay(500, 1000);
+      // Título ou trecho da oferta para identificar o post exato no feed
+      const titleKeywords = offer.title.split(' ').slice(0, 3).join(' ');
+      const titleSnippet = offer.title.substring(0, 20);
 
-        // Cola o texto do comentário com o link do WhatsApp
-        await page.evaluate((text) => {
-          navigator.clipboard.writeText(text);
-        }, waCommentText);
-        await page.keyboard.press('Control+v');
+      // Filtra artigos no feed que contenham o título da oferta postada
+      let targetArticle = page.locator('div[role="article"]').filter({ hasText: titleSnippet }).first();
+      let foundMyPost = await targetArticle.isVisible({ timeout: 3000 }).catch(() => false);
+
+      if (!foundMyPost) {
+        targetArticle = page.locator('div[role="article"]').filter({ hasText: titleKeywords }).first();
+        foundMyPost = await targetArticle.isVisible({ timeout: 3000 }).catch(() => false);
+      }
+
+      // Se o feed não tiver atualizado a tempo, faz rolagem suave para encontrar o post
+      if (!foundMyPost) {
+        await page.mouse.wheel(0, 300);
         await randomDelay(1000, 1500);
+        foundMyPost = await targetArticle.isVisible({ timeout: 2000 }).catch(() => false);
+      }
 
-        // Fallback de digitação se clipboard falhou
-        const textInComment = await commentBox.textContent();
-        if (!textInComment || textInComment.trim().length < 5) {
-          await commentBox.fill('');
-          await page.keyboard.type(waCommentText, { delay: 10 });
+      if (foundMyPost) {
+        console.log(`  🎯 Postagem própria identificada no feed! Inserindo comentário com link VIP...`);
+
+        // Busca o campo de comentário ESPECIFICAMENTE dentro do artigo da oferta postada
+        const commentBoxSelectors = [
+          'div[contenteditable="true"][aria-label*="comentá"]',
+          'div[contenteditable="true"][aria-label*="Escreva"]',
+          'div[contenteditable="true"][aria-label*="comment"]',
+          'div[contenteditable="true"]',
+          '[role="textbox"]',
+        ];
+
+        let commentBox = null;
+        for (const sel of commentBoxSelectors) {
+          try {
+            const el = targetArticle.locator(sel).first();
+            if (await el.isVisible({ timeout: 2000 })) {
+              commentBox = el;
+              break;
+            }
+          } catch { /* próximo */ }
         }
 
-        // Pressiona Enter para enviar o comentário
-        await page.keyboard.press('Enter');
-        console.log('  ✅ 1º Comentário com link do WhatsApp publicado!');
-        await randomDelay(2000, 3000);
+        if (commentBox) {
+          await commentBox.scrollIntoViewIfNeeded();
+          await commentBox.click();
+          await randomDelay(800, 1200);
 
-        // Tenta fixar o comentário no topo do post (se a opção estiver disponível no grupo)
-        try {
-          const commentMenuBtn = page.locator('div[role="article"] [aria-label*="Ações para este comentário"], div[role="article"] [aria-label*="Mais"], div[role="article"] [aria-label*="Comment actions"]').first();
-          if (await commentMenuBtn.isVisible({ timeout: 2000 })) {
-            await commentMenuBtn.click();
-            await randomDelay(800, 1200);
+          const waCommentText = formatFacebookWaComment(waGroupLink);
 
-            const pinBtn = page.locator('[role="menuitem"]:has-text("Fixar"), [role="menuitem"]:has-text("Pin")').first();
-            if (await pinBtn.isVisible({ timeout: 2000 })) {
-              await pinBtn.click();
-              console.log('  📌 Comentário do WhatsApp fixado no topo do post!');
-              await randomDelay(1000, 1500);
-            }
-          }
-        } catch { /* recurso opcional do Facebook */ }
+          // Digitação direta no campo exclusivo do post próprio
+          await page.keyboard.type(waCommentText, { delay: 10 });
+          await randomDelay(1000, 1500);
+
+          // Pressiona Enter para enviar o comentário
+          await page.keyboard.press('Enter');
+          console.log('  ✅ 1º Comentário com link do WhatsApp publicado no post correto!');
+          await randomDelay(2000, 3000);
+        } else {
+          console.log('  ℹ️ Campo de comentário não encontrado dentro da postagem da oferta.');
+        }
       } else {
-        console.log('  ℹ️ Não encontrou campo de comentário na publicação. O post com a foto do produto foi enviado.');
+        console.log('  ⚠️ Não foi possível isolar o post próprio no feed. O comentário não foi inserido em posts de terceiros por segurança.');
       }
     } catch (commentErr) {
       console.log(`  ⚠️ Aviso ao enviar comentário: ${commentErr}`);
