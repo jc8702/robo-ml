@@ -272,31 +272,54 @@ export async function sendOfferWithPhoto(
   offer: AffiliateOffer,
   targetJid: string
 ): Promise<boolean> {
-  // Se existir perfil do Playwright (.wa-profile), usa o motor Playwright 100% infalível
-  if (existsSync(join(process.cwd(), '.wa-profile'))) {
-    console.log('[WA] Usando motor Playwright WhatsApp Web para envio...');
-    return sendOfferWithPhotoPlaywright(offer, targetJid);
+  const caption = formatIndividualOffer(offer);
+
+  // 1. Tenta enviar via Baileys se a conexão já estiver aberta
+  if (sock && isConnected) {
+    try {
+      if (offer.thumbnail && offer.thumbnail.startsWith('http')) {
+        await sock.sendMessage(targetJid, {
+          image: { url: offer.thumbnail },
+          caption: caption,
+        });
+      } else {
+        await sock.sendMessage(targetJid, { text: caption });
+      }
+      console.log(`  [WA] ✅ Foto + Oferta enviada via Baileys: "${offer.title.substring(0, 30)}..."`);
+      return true;
+    } catch (err) {
+      console.error(`  [WA] Tentativa via Baileys falhou, alternando para Playwright:`, (err as Error)?.message || err);
+    }
   }
 
+  // 2. Se existir perfil do Playwright (.wa-profile), tenta via WhatsApp Web Chrome
+  if (existsSync(join(process.cwd(), '.wa-profile'))) {
+    try {
+      console.log('[WA] Usando motor Playwright WhatsApp Web para envio...');
+      const ok = await sendOfferWithPhotoPlaywright(offer, targetJid);
+      if (ok) return true;
+    } catch (pwErr) {
+      console.error('[WA] Playwright falhou, tentando inicializar Baileys:', pwErr);
+    }
+  }
+
+  // 3. Fallback: Tenta inicializar / conectar o cliente Baileys
   try {
     const client = await initWhatsAppClient();
-    const caption = formatIndividualOffer(offer);
-
     if (offer.thumbnail && offer.thumbnail.startsWith('http')) {
       await client.sendMessage(targetJid, {
         image: { url: offer.thumbnail },
         caption: caption,
       });
-      console.log(`  [WA] Foto + Oferta enviada: "${offer.title.substring(0, 30)}..."`);
+      console.log(`  [WA] ✅ Foto + Oferta enviada via Baileys (init): "${offer.title.substring(0, 30)}..."`);
     } else {
       await client.sendMessage(targetJid, { text: caption });
-      console.log(`  [WA] Oferta enviada (sem foto): "${offer.title.substring(0, 30)}..."`);
+      console.log(`  [WA] ✅ Oferta enviada via Baileys (init): "${offer.title.substring(0, 30)}..."`);
     }
-
     return true;
   } catch (error) {
-    console.error(`  [WA] Erro ao enviar oferta via Baileys, tentando Playwright:`, error);
-    return sendOfferWithPhotoPlaywright(offer, targetJid);
+    console.error(`  [WA] ❌ Não foi possível enviar no WhatsApp (Baileys & Playwright falharam). Vincule com: npm run wa:connect`);
+    return false;
   }
 }
 

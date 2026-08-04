@@ -4,25 +4,59 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdir
 import type { AffiliateOffer } from '../affiliate/link-converter.js';
 import { formatFacebookOffer, formatFacebookWaComment } from '../formatter/facebook.js';
 import { findBrowserPath, isCloudEnvironment } from '../config/browser.js';
+import { getDbPool } from '../db/index.js';
 
 const FB_PROFILE_DIR = join(process.cwd(), '.fb-profile');
 const TEMP_IMG_DIR = join(process.cwd(), '.fb-temp-images');
 
-// findBrowserPath() e isCloudEnvironment() importados de ../config/browser.js
-
-/**
- * Delay aleatório entre min e max ms para simular comportamento humano.
- */
 function randomDelay(minMs: number, maxMs: number): Promise<void> {
   const delay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
   return new Promise((r) => setTimeout(r, delay));
+}
+
+export async function restoreFbCookiesFromDb(context: BrowserContext): Promise<boolean> {
+  const db = getDbPool();
+  if (!db) return false;
+  try {
+    const res = await db.query("SELECT value FROM app_settings WHERE key = 'FB_COOKIES_JSON'");
+    if (res.rows.length > 0 && res.rows[0].value) {
+      const cookies = JSON.parse(res.rows[0].value);
+      if (Array.isArray(cookies) && cookies.length > 0) {
+        await context.addCookies(cookies);
+        console.log(`[FB] 🔑 ${cookies.length} cookie(s) do Facebook restaurados do Neon PostgreSQL.`);
+        return true;
+      }
+    }
+  } catch (err) {
+    console.error('[FB] Erro ao restaurar cookies do DB:', err);
+  }
+  return false;
+}
+
+export async function saveFbCookiesToDb(context: BrowserContext): Promise<void> {
+  const db = getDbPool();
+  if (!db) return;
+  try {
+    const cookies = await context.cookies('https://www.facebook.com');
+    if (cookies && cookies.length > 0) {
+      const json = JSON.stringify(cookies);
+      await db.query(
+        `INSERT INTO app_settings (key, value) VALUES ('FB_COOKIES_JSON', $1)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [json]
+      );
+      console.log(`[FB] 💾 ${cookies.length} cookie(s) do Facebook salvos no Neon PostgreSQL.`);
+    }
+  } catch (err) {
+    console.error('[FB] Erro ao salvar cookies no DB:', err);
+  }
 }
 
 /**
  * Abre browser com perfil persistente dedicado ao Facebook.
  * Separado do perfil do ML para evitar conflitos de sessão.
  */
-async function openFacebookBrowser(): Promise<BrowserContext> {
+export async function openFacebookBrowser(): Promise<BrowserContext> {
   const executablePath = findBrowserPath();
   const isCloud = isCloudEnvironment();
 
@@ -61,6 +95,9 @@ async function openFacebookBrowser(): Promise<BrowserContext> {
       app: {},
     };
   });
+
+  // Restaura cookies da sessão do Neon DB
+  await restoreFbCookiesFromDb(context);
 
   return context;
 }
