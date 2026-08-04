@@ -73,7 +73,8 @@ function updateEnvFile(updates: Record<string, string | number>): void {
 }
 
 export async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const url = req.url || '/';
+  const rawUrl = req.url || '/';
+  const url = rawUrl.split('?')[0].replace(/\/+$/, '') || '/';
   const method = req.method || 'GET';
 
   const sendJson = (data: any, status = 200) => {

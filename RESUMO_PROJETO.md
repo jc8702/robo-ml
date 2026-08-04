@@ -6,6 +6,9 @@
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
 - **Última Atualização:** 04/08/2026 - 01:19
 
+- **04/08/2026 - 03:39:** **Correção dos Botões de Ação na Barra Superior (`public/index.html` e `src/server.ts`):**
+  - **"Enviar Ofertas Agora" (`/api/bot/run-now`)**: Corrigida a execução para carregar as configurações atualizadas do Neon DB (`loadConfigAsync()`), aguardar o disparo da varredura (`await runAutomaticCycle()`) e recarregar automaticamente a galeria visual de ofertas enviadas ao concluir.
+  - **"Iniciar/Pausar Automação" (`/api/bot/start` / `/api/bot/stop`)**: Atualizados para carregar a configuração assíncrona do banco e alternar o status com feedback visual Toast e estado do botão em tempo real.
 - **04/08/2026 - 03:35:** **Isolamento de Comentários nos Posts do Facebook (`src/facebook/fb-poster.ts`):**
   - Corrigido o seletor do campo de comentários para filtrar estritamente o elemento do post recém-publicado (`targetArticle.filter({ hasText: titleSnippet })`).
   - Prevenida a inserção acidental de comentários em posts fixados/anúncios de terceiros no topo do feed. Caso o post não seja isolado com 100% de precisão, o comentário é suprimido com segurança sem afetar a publicação da foto.
