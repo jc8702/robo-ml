@@ -141,39 +141,70 @@ export async function sendOfferWithPhotoPlaywright(
         writeFileSync(tempImgPath, Buffer.from(buffer));
 
         // Clica no botão de anexar (+)
-        const attachSelector = '[data-icon="plus"], [data-icon="clip"], [title="Anexar"]';
-        const attachBtn = await page.$(attachSelector);
-        if (attachBtn) {
-          await attachBtn.click();
+        const attachSelector = '[aria-label*="Anexar"], [title*="Anexar"], [data-icon="plus"], [data-icon="clip"]';
+        try {
+          const attachBtn = page.locator(attachSelector).first();
+          if (await attachBtn.isVisible({ timeout: 3000 })) {
+            await attachBtn.click();
+            await page.waitForTimeout(800);
+          }
+        } catch { /* se já estiver expandido */ }
+
+        // Faz o upload no input de arquivo (mesmo que oculto pelo CSS do WhatsApp)
+        const fileInput = page.locator('input[type="file"]').first();
+        await fileInput.setInputFiles(tempImgPath);
+        await page.waitForTimeout(2500);
+
+        // Digita a legenda no modal de pré-visualização da imagem
+        const captionSelectors = [
+          'div[contenteditable="true"][aria-placeholder*="legenda"]',
+          'div[contenteditable="true"][aria-placeholder*="caption"]',
+          'div[role="textbox"][contenteditable="true"]',
+          '#main div[contenteditable="true"]'
+        ];
+
+        let captionBox = null;
+        for (const sel of captionSelectors) {
+          try {
+            const el = page.locator(sel).first();
+            if (await el.isVisible({ timeout: 2000 })) {
+              captionBox = el;
+              break;
+            }
+          } catch { /* próximo */ }
+        }
+
+        if (captionBox) {
+          await captionBox.click();
+          await page.keyboard.insertText(caption);
           await page.waitForTimeout(1000);
         }
 
-        // Faz o upload no input de foto/vídeo
-        const fileInput = await page.waitForSelector('input[type="file"][accept*="image"], input[type="file"]', {
-          timeout: 10000,
-        });
+        // Clica no botão de enviar (ícone de avião/seta)
+        const sendBtnSelectors = [
+          '[data-icon="send"]',
+          '[aria-label*="Enviar"]',
+          '[aria-label*="Send"]',
+          'span[data-icon="send"]'
+        ];
 
-        if (fileInput) {
-          await fileInput.setInputFiles(tempImgPath);
-          await page.waitForTimeout(2000);
-
-          // Digita a legenda no modal de pré-visualização
-          const captionBox = await page.$('div[contenteditable="true"][aria-placeholder*="legenda"], div[contenteditable="true"]');
-          if (captionBox) {
-            await captionBox.click();
-            await page.keyboard.insertText(caption);
-            await page.waitForTimeout(1000);
-          }
-
-          // Clica no botão de enviar (ícone de avião/seta)
-          const sendBtn = await page.waitForSelector('[data-icon="send"]', { timeout: 10000 });
-          if (sendBtn) {
-            await sendBtn.click();
-            console.log(`[WA-PLAYWRIGHT] ✅ Foto + Oferta enviada: "${offer.title.substring(0, 30)}..."`);
-          }
+        let sentOk = false;
+        for (const sel of sendBtnSelectors) {
+          try {
+            const btn = page.locator(sel).first();
+            if (await btn.isVisible({ timeout: 2000 })) {
+              await btn.click();
+              sentOk = true;
+              break;
+            }
+          } catch { /* próximo */ }
         }
 
-        // Limpa arquivo temporário
+        if (!sentOk) {
+          await page.keyboard.press('Enter');
+        }
+
+        console.log(`[WA-PLAYWRIGHT] ✅ Foto + Oferta enviada no WhatsApp: "${offer.title.substring(0, 30)}..."`);
         if (existsSync(tempImgPath)) rmSync(tempImgPath);
         return true;
       } catch (err) {
