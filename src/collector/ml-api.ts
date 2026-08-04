@@ -32,21 +32,8 @@ async function openBrowser(): Promise<{ browser: Browser; context: BrowserContex
   const executablePath = findBrowserPath();
   const isCloud = isCloudEnvironment();
 
-  if (!existsSync(BROWSER_PROFILE_DIR)) {
-    mkdirSync(BROWSER_PROFILE_DIR, { recursive: true });
-  }
-
   const launchOptions: any = {
     headless: isCloud,
-    locale: 'pt-BR',
-    viewport: { width: 1366, height: 768 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    extraHTTPHeaders: {
-      'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-      'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"Windows"',
-    },
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -62,13 +49,24 @@ async function openBrowser(): Promise<{ browser: Browser; context: BrowserContex
     launchOptions.executablePath = executablePath;
   }
 
-  const context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, launchOptions);
+  const browser = await chromium.launch(launchOptions);
+  const context = await browser.newContext({
+    locale: 'pt-BR',
+    viewport: { width: 1366, height: 768 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    extraHTTPHeaders: {
+      'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+    },
+  });
 
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
   });
 
-  return { browser: context as unknown as Browser, context };
+  return { browser, context };
 }
 
 /**
