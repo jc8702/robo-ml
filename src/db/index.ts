@@ -15,9 +15,14 @@ export function getDbPool(): pg.Pool | null {
   }
 
   if (!pool) {
+    // Evita o warning de deprecation do SSL no driver pg
+    const formattedUrl = dbUrl.includes('sslmode=require')
+      ? dbUrl.replace('sslmode=require', 'sslmode=verify-full')
+      : dbUrl;
+
     pool = new Pool({
-      connectionString: dbUrl,
-      ssl: dbUrl.includes('localhost') ? false : { rejectUnauthorized: false },
+      connectionString: formattedUrl,
+      ssl: formattedUrl.includes('localhost') ? false : { rejectUnauthorized: false },
     });
   }
 
@@ -39,8 +44,17 @@ export async function initDb(): Promise<boolean> {
           id VARCHAR(255) PRIMARY KEY,
           title TEXT NOT NULL,
           current_price NUMERIC(10, 2) NOT NULL,
+          original_price NUMERIC(10, 2),
+          discount_percent NUMERIC(5, 2),
+          permalink TEXT,
+          image_url TEXT,
           sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+
+        ALTER TABLE sent_history ADD COLUMN IF NOT EXISTS original_price NUMERIC(10, 2);
+        ALTER TABLE sent_history ADD COLUMN IF NOT EXISTS discount_percent NUMERIC(5, 2);
+        ALTER TABLE sent_history ADD COLUMN IF NOT EXISTS permalink TEXT;
+        ALTER TABLE sent_history ADD COLUMN IF NOT EXISTS image_url TEXT;
 
         CREATE TABLE IF NOT EXISTS price_history (
           id SERIAL PRIMARY KEY,
@@ -78,7 +92,12 @@ export async function initDb(): Promise<boolean> {
       client.release();
     }
   } catch (error) {
-    console.error('⚠️ Erro ao inicializar tabelas no Neon PostgreSQL (banco desativado/não configurado):', (error as Error)?.message || error);
+    const errMsg = (error as Error)?.message || String(error);
+    if (errMsg.includes('password authentication failed')) {
+      console.log('ℹ️ Neon PostgreSQL: Credencial/Senha indisponível. O bot continuará operando 100% em modo de arquivo local.');
+    } else {
+      console.log(`ℹ️ Neon PostgreSQL indisponível. O bot continuará operando 100% em modo de arquivo local.`);
+    }
     dbConnectionFailed = true;
     if (pool) {
       pool.end().catch(() => {});

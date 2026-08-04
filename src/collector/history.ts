@@ -8,7 +8,15 @@ const PRICE_HISTORY_FILE = join(process.cwd(), '.price-history.json');
 export interface HistoryItem {
   id: string;
   permalink: string;
+  link?: string;
   title: string;
+  currentPrice?: number;
+  price?: number;
+  originalPrice?: number;
+  discountPercent?: number;
+  discount?: number;
+  imageUrl?: string;
+  thumbnail?: string;
   sentAt: string;
 }
 
@@ -19,6 +27,69 @@ export interface PriceRecord {
 
 export interface ProductPriceHistory {
   [titleKey: string]: PriceRecord[];
+}
+
+/**
+ * Carrega a lista completa de ofertas enviadas para exibição no painel web.
+ * Tenta carregar do Neon PostgreSQL primeiro, depois faz fallback para o arquivo local .sent-history.json.
+ */
+export async function getSentOffersHistoryFromDb(): Promise<HistoryItem[]> {
+  const db = getDbPool();
+  if (db) {
+    try {
+      const res = await db.query(
+        `SELECT id, title, current_price, original_price, discount_percent, permalink, image_url, sent_at
+         FROM sent_history
+         ORDER BY sent_at DESC
+         LIMIT 60`
+      );
+      if (res.rows.length > 0) {
+        return res.rows.map((row) => {
+          const currentPrice = row.current_price ? parseFloat(row.current_price) : 0;
+          const originalPrice = row.original_price ? parseFloat(row.original_price) : undefined;
+          const discountPercent = row.discount_percent ? parseFloat(row.discount_percent) : undefined;
+          const link = row.permalink || `https://www.mercadolivre.com.br/p/${row.id}`;
+          const image = row.image_url || '';
+
+          return {
+            id: row.id,
+            title: row.title,
+            currentPrice,
+            price: currentPrice,
+            originalPrice,
+            discountPercent,
+            discount: discountPercent,
+            permalink: link,
+            link,
+            imageUrl: image,
+            thumbnail: image,
+            sentAt: new Date(row.sent_at).toISOString(),
+          };
+        });
+      }
+    } catch (err) {
+      console.error('[DB] Erro ao carregar historico do Neon:', err);
+    }
+  }
+
+  // Fallback para arquivo local
+  if (existsSync(HISTORY_FILE)) {
+    try {
+      const raw = readFileSync(HISTORY_FILE, 'utf-8');
+      const items: HistoryItem[] = JSON.parse(raw);
+      return items.reverse().map((item) => ({
+        ...item,
+        price: item.price ?? item.currentPrice,
+        link: item.link ?? item.permalink,
+        thumbnail: item.thumbnail ?? item.imageUrl,
+        discount: item.discount ?? item.discountPercent,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
 }
 
 /**
@@ -98,7 +169,16 @@ function loadSentHistoryFromFile(): Set<string> {
 /**
  * Salva as ofertas recém-enviadas no histórico (arquivo local + Neon PostgreSQL).
  */
-export function saveSentOffersToHistory(offers: { permalink: string; title: string; currentPrice?: number }[]): void {
+export function saveSentOffersToHistory(
+  offers: {
+    permalink: string;
+    title: string;
+    currentPrice?: number;
+    originalPrice?: number;
+    discountPercent?: number;
+    imageUrl?: string;
+  }[]
+): void {
   // --- Arquivo local (compatibilidade e cache rápido) ---
   let items: HistoryItem[] = [];
 
@@ -116,7 +196,15 @@ export function saveSentOffersToHistory(offers: { permalink: string; title: stri
     items.push({
       id: offer.permalink.split('/p/')[1] || offer.permalink,
       permalink: offer.permalink,
+      link: offer.permalink,
       title: offer.title,
+      currentPrice: offer.currentPrice,
+      price: offer.currentPrice,
+      originalPrice: offer.originalPrice,
+      discountPercent: offer.discountPercent,
+      discount: offer.discountPercent,
+      imageUrl: offer.imageUrl,
+      thumbnail: offer.imageUrl,
       sentAt: now,
     });
   }
@@ -143,7 +231,16 @@ export function saveSentOffersToHistory(offers: { permalink: string; title: stri
 /**
  * Salva ofertas enviadas no Neon PostgreSQL.
  */
-async function saveSentOffersToDb(offers: { permalink: string; title: string; currentPrice?: number }[]): Promise<void> {
+async function saveSentOffersToDb(
+  offers: {
+    permalink: string;
+    title: string;
+    currentPrice?: number;
+    originalPrice?: number;
+    discountPercent?: number;
+    imageUrl?: string;
+  }[]
+): Promise<void> {
   const db = getDbPool();
   if (!db) return;
 
@@ -153,10 +250,23 @@ async function saveSentOffersToDb(offers: { permalink: string; title: string; cu
       for (const offer of offers) {
         const id = offer.permalink.split('/p/')[1] || offer.permalink;
         const price = typeof offer.currentPrice === 'number' ? offer.currentPrice : 0;
+        const origPrice = typeof offer.originalPrice === 'number' ? offer.originalPrice : null;
+        const discount = typeof offer.discountPercent === 'number' ? offer.discountPercent : null;
+        const link = offer.permalink;
+        const image = offer.imageUrl || '';
+
         await client.query(
-          `INSERT INTO sent_history (id, title, current_price) VALUES ($1, $2, $3)
-           ON CONFLICT (id) DO UPDATE SET sent_at = CURRENT_TIMESTAMP`,
-          [id, offer.title, price]
+          `INSERT INTO sent_history (id, title, current_price, original_price, discount_percent, permalink, image_url)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO UPDATE SET
+             title = EXCLUDED.title,
+             current_price = EXCLUDED.current_price,
+             original_price = EXCLUDED.original_price,
+             discount_percent = EXCLUDED.discount_percent,
+             permalink = EXCLUDED.permalink,
+             image_url = EXCLUDED.image_url,
+             sent_at = CURRENT_TIMESTAMP`,
+          [id, offer.title, price, origPrice, discount, link, image]
         );
       }
       console.log(`[DB] ${offers.length} oferta(s) registrada(s) no Neon PostgreSQL.`);

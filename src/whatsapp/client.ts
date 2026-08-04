@@ -46,6 +46,11 @@ async function saveCredsToDb() {
   if (!db || !existsSync(join(AUTH_DIR, 'creds.json'))) return;
   try {
     const content = readFileSync(join(AUTH_DIR, 'creds.json'), 'utf-8');
+    const parsed = JSON.parse(content);
+    // IMPORTANTE: Só envia/salva no Neon DB se a sessão estiver 100% pareada e registrada!
+    if (!parsed.registered) {
+      return;
+    }
     await db.query(
       `INSERT INTO app_settings (key, value) VALUES ('WA_AUTH_creds.json', $1)
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
@@ -166,8 +171,10 @@ export async function initWhatsAppClient(): Promise<WASocket> {
 
     const currentSockInstance = sock;
 
-    // Se NÃO está registrado E ainda NÃO solicitou um código ativo neste ciclo
-    if (usePairingCode && !isRegistered && !currentPairingCode) {
+    const hasWaProfile = existsSync(join(process.cwd(), '.wa-profile'));
+
+    // Se NÃO está registrado E ainda NÃO solicitou um código ativo neste ciclo E NÃO usa sessão do Playwright
+    if (usePairingCode && !isRegistered && !currentPairingCode && !hasWaProfile) {
       console.log(`[WA] Iniciando solicitação de Pairing Code para +${phoneNumber}...`);
       setTimeout(async () => {
         if (sock !== currentSockInstance || isConnected) return;
@@ -222,23 +229,25 @@ export async function initWhatsAppClient(): Promise<WASocket> {
         isConnecting = false;
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
         const loggedOut = statusCode === DisconnectReason.loggedOut;
+        const isUnauthorized = loggedOut || statusCode === 401;
 
         if (process.env.IS_TEST_MODE === 'true') {
           console.log(`[WA] [MODO TESTE] Conexão encerrada (código: ${statusCode}).`);
           return;
         }
 
-        // Se deslogou explicitamente pelo celular (código 401 / loggedOut)
-        if (loggedOut && isRegistered) {
-          console.error('[WA] Sessão desvinculada no celular. Limpando credenciais...');
+        // Se deslogou ou foi rejeitado com erro 401 (unauthorized / loggedOut), expurga sessão corrompida
+        if (isUnauthorized) {
+          console.error(`[WA] Sessão desvinculada ou rejeitada (status: ${statusCode || 401}). Limpando credenciais locais e do Neon DB...`);
           clearLocalAuth();
           clearCredsFromDb().catch(() => {});
-          scheduleReconnect(3000, 'Reiniciando para novo pareamento...');
+          reconnectAttempts = 0;
+          scheduleReconnect(5000, 'Reiniciando para novo pareamento do zero...');
           return;
         }
 
         // Se a conexão fechar durante o pareamento inicial (protocolo normal do Baileys ao alternar fluxos),
-        // RECONECTA IMEDIATAMENTE (2s) mantendo o pairing code para escutar a confirmação do celular!
+        // RECONECTA IMEDIATAMENTE (3s) mantendo o pairing code para escutar a confirmação do celular!
         if (!isRegistered) {
           reconnectAttempts++;
           console.log(`[WA] Conexão alternada durante pareamento (status: ${statusCode || 'desconectado'}). Mantendo socket de escuta... (tentativa ${reconnectAttempts})`);

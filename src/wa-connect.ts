@@ -9,6 +9,7 @@
  * - Imune a erros de protocolo Baileys 401 / 440 / 515.
  */
 import 'dotenv/config';
+process.env.HEADLESS = 'false';
 import { ensureWhatsAppLoggedIn as ensureWa } from './whatsapp/wa-playwright.js';
 
 async function main() {

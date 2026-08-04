@@ -1,4 +1,6 @@
 import cron, { type ScheduledTask } from 'node-cron';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { AppConfig } from '../config/settings.js';
 import { loadConfigAsync } from '../config/settings.js';
 import { collectOffers } from '../collector/ml-api.js';
@@ -49,13 +51,27 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
 
   const affiliateOffers = await convertOffers(offers, config);
 
-  const sentOffers: { permalink: string; title: string }[] = [];
+  const sentOffers: {
+    permalink: string;
+    title: string;
+    currentPrice?: number;
+    originalPrice?: number;
+    discountPercent?: number;
+    imageUrl?: string;
+  }[] = [];
 
   for (let i = 0; i < affiliateOffers.length; i++) {
     const offer = affiliateOffers[i];
     const sent = await sendOfferWithPhoto(offer, groupJid);
     if (sent) {
-      sentOffers.push({ permalink: offer.permalink, title: offer.title });
+      sentOffers.push({
+        permalink: offer.permalink,
+        title: offer.title,
+        currentPrice: offer.currentPrice,
+        originalPrice: offer.originalPrice,
+        discountPercent: offer.discountPercent,
+        imageUrl: offer.thumbnail,
+      });
     }
 
     if (i < affiliateOffers.length - 1) {
@@ -101,10 +117,17 @@ export async function startScheduler(config: AppConfig): Promise<void> {
 
   console.log('\n[SCHEDULER] Agendador Automatico Iniciado!');
   console.log(`[SCHEDULER] Frequencia (Cron): "${cronExpression}"`);
-  console.log(`[SCHEDULER] WhatsApp: Ativo`);
-  console.log(`[SCHEDULER] Facebook: ${config.facebook.enabled ? `Ativo (${config.facebook.groupUrls.length} grupo(s))` : 'Desativado'}`);
+  const hasWaProfile = existsSync(join(process.cwd(), '.wa-profile'));
+  const hasWaAuth = existsSync(join(process.cwd(), '.wa-auth', 'creds.json'));
 
-  await initWhatsAppClient();
+  if (hasWaProfile) {
+    console.log('[SCHEDULER] WhatsApp: Sessão Web Ativa (.wa-profile/)');
+  } else if (hasWaAuth) {
+    console.log('[SCHEDULER] WhatsApp: Conectando via Baileys...');
+    await initWhatsAppClient().catch(() => {});
+  } else {
+    console.log('[SCHEDULER] WhatsApp: Nenhuma sessão pareada detectada. Dê dois cliques em Conectar-WhatsApp.bat para vincular.');
+  }
 
   await runAutomaticCycle(config);
 

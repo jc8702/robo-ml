@@ -26,14 +26,27 @@ const BROWSER_PROFILE_DIR = join(process.cwd(), '.chrome-profile');
 // findBrowserPath() e isCloudEnvironment() importados de ../config/browser.js
 
 /**
- * Cria uma instância limpa do browser + contexto com User-Agent oficial de Desktop Chrome.
+ * Cria uma instância com perfil persistente + contexto com User-Agent oficial de Desktop Chrome.
  */
 async function openBrowser(): Promise<{ browser: Browser; context: BrowserContext }> {
   const executablePath = findBrowserPath();
   const isCloud = isCloudEnvironment();
 
+  if (!existsSync(BROWSER_PROFILE_DIR)) {
+    mkdirSync(BROWSER_PROFILE_DIR, { recursive: true });
+  }
+
   const launchOptions: any = {
-    headless: true,
+    headless: isCloud,
+    locale: 'pt-BR',
+    viewport: { width: 1366, height: 768 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    extraHTTPHeaders: {
+      'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+    },
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -49,24 +62,13 @@ async function openBrowser(): Promise<{ browser: Browser; context: BrowserContex
     launchOptions.executablePath = executablePath;
   }
 
-  const browserInstance = await chromium.launch(launchOptions);
-  const context = await browserInstance.newContext({
-    locale: 'pt-BR',
-    viewport: { width: 1366, height: 768 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    extraHTTPHeaders: {
-      'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-      'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"Windows"',
-    },
-  });
+  const context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, launchOptions);
 
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
   });
 
-  return { browser: browserInstance, context };
+  return { browser: context as unknown as Browser, context };
 }
 
 /**
@@ -109,7 +111,7 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
           permalink = `https://produto.mercadolivre.com.br/${mlbMatch[1]}`;
         }
 
-        const card = a.closest('.poly-card, .ui-search-result__wrapper, .ui-search-layout__item, li, article') || a.parentElement || a;
+        const card = a.closest('.poly-card, .ui-search-result__wrapper, .ui-search-layout__item, li, article, .promotion-item') || a.parentElement || a;
         const titleEl = card.querySelector('h2, h3, .poly-component__title, [class*="title"]') || a;
         const title = titleEl?.textContent?.trim() || '';
         if (!title || title.length < 5) return;
@@ -216,10 +218,9 @@ export async function searchOffers(
       context = res.context;
     }
 
-    page = await context.newPage();
+    page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
 
-    const searchQuery = query.replace(/\s+/g, '-');
-    const url = `https://lista.mercadolivre.com.br/${encodeURIComponent(searchQuery)}`;
+    const url = `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(query)}`;
 
     console.log(`  📡 Acessando: ${url}`);
 
@@ -230,16 +231,16 @@ export async function searchOffers(
     }
 
     // Espera a navegação estabilizar (captura redirecionamentos cliente)
-    await page.waitForSelector('.poly-card, .ui-search-result, article, li.ui-search-layout__item', { timeout: 10000 }).catch(() => {});
+    await page.waitForSelector('.poly-card, .ui-search-result, article, li.ui-search-layout__item, .promotion-item', { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(1500);
     console.log(`  🔎 URL Resolvida: "${page.url()}" | Título: "${await page.title()}"`);
 
     let offers: MLOffer[] = [];
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
         offers = await extractOffers(page);
         console.log(`  [DEBUG] Tentativa ${attempt + 1}: ${offers.length} ofertas brutas extraídas`);
-        if (offers.length > 0) break;
+        if (offers.length > 0 && !page.url().includes('account-verification')) break;
         await page.waitForTimeout(1500);
       } catch (err) {
         console.log(`  [DEBUG] Tentativa ${attempt + 1} falhou com erro: ${err}`);
@@ -255,11 +256,24 @@ export async function searchOffers(
       .split(/\s+/)
       .filter((w) => w.length >= 3);
 
-    const relevantOffers = offers.filter((offer) => {
+    let relevantOffers = offers.filter((offer) => {
       if (isGenericQuery) return true;
       const titleLower = offer.title.toLowerCase();
       return queryKeywords.some((keyword) => titleLower.includes(keyword));
     });
+
+    // Fallback: se não encontrou nenhuma oferta relevante com os termos da busca (ou caiu em account-verification),
+    // acessa a página oficial de ofertas do Mercado Livre (/ofertas) e aceita as ofertas promocionais do feed!
+    if (page.url().includes('account-verification') || relevantOffers.length === 0) {
+      console.log(`  ⚠️ 0 ofertas relevantes para "${query}". Carregando feed de destaques (/ofertas)...`);
+      await page.goto('https://www.mercadolivre.com.br/ofertas', { waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => {});
+      await page.waitForTimeout(2500);
+      const fallbackOffers = await extractOffers(page);
+      if (fallbackOffers.length > 0) {
+        relevantOffers = fallbackOffers;
+        console.log(`  [DEBUG] Feed /ofertas: ${fallbackOffers.length} ofertas promocionais obtidas.`);
+      }
+    }
 
     console.log(`  📦 ${offers.length} no ML ➔ ${relevantOffers.length} filtrados com precisão para "${query}"`);
 

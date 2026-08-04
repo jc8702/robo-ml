@@ -52,17 +52,47 @@ export async function saveFbCookiesToDb(context: BrowserContext): Promise<void> 
   }
 }
 
+function cleanProfileLock(profileDir: string) {
+  const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lockfile'];
+  for (const lockFile of lockFiles) {
+    const lockPath = join(profileDir, lockFile);
+    if (existsSync(lockPath)) {
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // Se o arquivo estiver preso por outro processo ativo, ignora
+      }
+    }
+  }
+}
+
+let activeFbContext: BrowserContext | null = null;
+
 /**
  * Abre browser com perfil persistente dedicado ao Facebook.
  * Separado do perfil do ML para evitar conflitos de sessão.
  */
 export async function openFacebookBrowser(): Promise<BrowserContext> {
+  if (activeFbContext && activeFbContext.pages().length > 0) {
+    try {
+      // Testa se o contexto ainda está responsivo
+      const pages = activeFbContext.pages();
+      if (pages.length > 0 && !pages[0].isClosed()) {
+        return activeFbContext;
+      }
+    } catch {
+      activeFbContext = null;
+    }
+  }
+
   const executablePath = findBrowserPath();
   const isCloud = isCloudEnvironment();
 
   if (!existsSync(FB_PROFILE_DIR)) {
     mkdirSync(FB_PROFILE_DIR, { recursive: true });
   }
+
+  cleanProfileLock(FB_PROFILE_DIR);
 
   const context = await chromium.launchPersistentContext(FB_PROFILE_DIR, {
     headless: isCloud,
@@ -77,6 +107,8 @@ export async function openFacebookBrowser(): Promise<BrowserContext> {
     ],
     ignoreDefaultArgs: ['--enable-automation'],
   });
+
+  activeFbContext = context;
 
   // Stealth: esconde sinais de automação
   await context.addInitScript(() => {

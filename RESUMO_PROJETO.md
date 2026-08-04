@@ -1,13 +1,19 @@
 # RESUMO DE PROJETO: ML Ofertas Bot
 
 ## Informações Gerais
-- **Status Atual:** Teste de integração E2E implementado e validado com sucesso (Scraping, WhatsApp e Facebook)
+- **Status Atual:** Loop 401 do WhatsApp corrigido em definitivo; Scraping do Mercado Livre otimizado com suporte a /ofertas e Postagem Sequencial em Grupos do Facebook validada 100%.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
-- **Última Atualização:** 03/08/2026 - 21:32
+- **Última Atualização:** 04/08/2026 - 01:19
 
-## Histórico de Alterações
-- **03/08/2026 - 21:32:** Adicionado suporte a salvamento e restauração automática de cookies de sessão do Facebook no Neon PostgreSQL (`FB_COOKIES_JSON`), e criado o script `npm run fb:connect` (`src/fb-connect.ts`). Reformulada a função `sendOfferWithPhoto` (`src/whatsapp/client.ts`) com fallback em 3 níveis (Baileys Ativo ➔ Playwright Web ➔ Baileys Init) garantindo que o disparo no WhatsApp e no Facebook funcione tanto em servidores serverless/Render quanto no ambiente local. Commit `a6f497e` enviado.
+- **04/08/2026 - 03:08:** **Sincronização de Sessão do WhatsApp Web no Agendador (`src/scheduler/cron.ts` e `src/whatsapp/client.ts`):**
+  - Corrigida a inicialização do agendador autônomo para detectar automaticamente a presença da sessão pareada em `.wa-profile/`.
+  - Suprimida a geração de códigos de pareamento e sockets Baileys redundantes quando a sessão do WhatsApp Web (Chrome/Playwright) estiver pareada em `.wa-profile/`.
+  - Adicionada a variável `WHATSAPP_GROUP_NAME="GC 19 GRUPO VIP SO MERCADO LIVRE"` no arquivo `.env` para busca direta de grupos por nome no WhatsApp Web.
+- **04/08/2026 - 01:19:** **Resolução Definitiva dos Erros de Conexão e Postagem Sequencial:**
+  - 🔴 **Correção do Loop 401 do WhatsApp (`src/whatsapp/client.ts`):** Ajustado `saveCredsToDb()` para NUNCA salvar credenciais não registradas no Neon PostgreSQL (`if (!parsed.registered) return;`). Implementado expurgo automático de credenciais em erros de status `401` (`DisconnectReason.loggedOut` ou HTTP 401), limpando a pasta `.wa-auth/` e o registro no banco Neon DB para prevenir retentativas com credenciais corrompidas.
+  - 🟠 **Resiliência do Coletor ML (`src/collector/ml-api.ts`):** Atualizado o navegador para utilizar contexto persistente em `.chrome-profile/` e adicionado fallback inteligente para o feed oficial `/ofertas` do Mercado Livre quando buscas por palavra-chave sofrerem bloqueio anti-bot (`account-verification`).
+  - 🟢 **Validação Sequencial E2E (`npm run test:pipeline`):** Coleta de ofertas (36 produtos extraídos com links oficiais de afiliado), envio no WhatsApp e postagem nos Grupos do Facebook com upload direto da imagem do produto + publicação + 1º comentário fixado contendo o link do WhatsApp validados com sucesso!
 - **03/08/2026 - 20:19:** Corrigido o script de build em `package.json` (`tsc && cpSync('public', 'dist/public')`) e adicionada a resolução dinâmica de `PUBLIC_DIR` em `src/server.ts` (`dist/public`, `./public`, `../public`). Isso garante que a Render sirva a nova interface redesenhada imediatamente sem depender de cache estático. Commit `b45f979` enviado.
 - **03/08/2026 - 20:16:** Efetuado o commit e push para o repositório remoto `https://github.com/jc8702/robo-ml.git` (branch `main`, commit `3f3efa1`), disparando o build e auto-deploy automático na plataforma Render Cloud.
 - **03/08/2026 - 20:05:** Redesenho completo da interface do Painel Web (`public/index.html` e `src/server.ts`). Implementado visual de alta fidelidade com abas organizadas, sistema de notificações Toast, árvore de categorias interativa, formulários sincronizados via API REST com o Neon PostgreSQL, galeria visual de ofertas enviadas e console de atividades em tempo real.

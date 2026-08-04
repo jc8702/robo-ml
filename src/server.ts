@@ -6,6 +6,7 @@ import { loadConfig, loadConfigAsync, type AppConfig } from './config/settings.j
 import { runAutomaticCycle, startScheduler, stopScheduler } from './scheduler/cron.js';
 import { dbSaveMultipleSettings, initDb } from './db/index.js';
 import { currentPairingCode, pairingCodeRequestedAt, currentQrRaw } from './whatsapp/client.js';
+import { getSentOffersHistoryFromDb } from './collector/history.js';
 
 // initDb sera chamado apos o servidor subir (ver callback do listen abaixo)
 
@@ -271,13 +272,9 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
 
   // GET /api/history
   if (method === 'GET' && (url === '/api/history' || url.endsWith('/history'))) {
-    if (!existsSync(HISTORY_FILE)) {
-      return sendJson([]);
-    }
     try {
-      const historyContent = readFileSync(HISTORY_FILE, 'utf-8');
-      const items = JSON.parse(historyContent);
-      return sendJson(items.reverse());
+      const items = await getSentOffersHistoryFromDb();
+      return sendJson(items);
     } catch {
       return sendJson([]);
     }

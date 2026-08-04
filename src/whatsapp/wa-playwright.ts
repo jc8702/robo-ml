@@ -1,6 +1,6 @@
 import { chromium, BrowserContext, Page } from 'playwright-core';
 import { join } from 'node:path';
-import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, rmSync, unlinkSync } from 'node:fs';
 import { findBrowserPath, isCloudEnvironment } from '../config/browser.js';
 import type { AffiliateOffer } from '../affiliate/link-converter.js';
 import { formatIndividualOffer } from '../formatter/whatsapp.js';
@@ -17,6 +17,14 @@ export async function openWhatsAppBrowser(): Promise<{ context: BrowserContext; 
 
   if (!existsSync(WA_PROFILE_DIR)) {
     mkdirSync(WA_PROFILE_DIR, { recursive: true });
+  }
+
+  const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lockfile'];
+  for (const lockFile of lockFiles) {
+    const lockPath = join(WA_PROFILE_DIR, lockFile);
+    if (existsSync(lockPath)) {
+      try { unlinkSync(lockPath); } catch {}
+    }
   }
 
   const isCloud = isCloudEnvironment();
@@ -106,16 +114,17 @@ export async function sendOfferWithPhotoPlaywright(
     const page = await ensureWhatsAppLoggedIn();
     const caption = formatIndividualOffer(offer);
 
-    console.log(`[WA-PLAYWRIGHT] Selecionando conversa/grupo: ${targetGroupOrPhone}...`);
+    const targetSearchTerm = process.env.WHATSAPP_GROUP_NAME || targetGroupOrPhone;
+    console.log(`[WA-PLAYWRIGHT] Selecionando conversa/grupo: "${targetSearchTerm}"...`);
 
     // Procura a barra de pesquisa de conversas
-    const searchSelector = '#side div[contenteditable="true"], [aria-label="Caixa de texto de pesquisa"]';
+    const searchSelector = '#side div[contenteditable="true"], [aria-label="Caixa de texto de pesquisa"], [aria-label="Pesquisar ou começar uma nova conversa"]';
     const searchBox = await page.waitForSelector(searchSelector, { timeout: 15000 });
 
     if (searchBox) {
       await searchBox.click();
       await searchBox.fill('');
-      await searchBox.type(targetGroupOrPhone, { delay: 100 });
+      await searchBox.type(targetSearchTerm, { delay: 100 });
       await page.waitForTimeout(2000);
 
       // Pressiona Enter para abrir a conversa encontrada
