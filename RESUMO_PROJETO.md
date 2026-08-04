@@ -6,6 +6,9 @@
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
 - **Última Atualização:** 04/08/2026 - 01:19
 
+- **04/08/2026 - 04:00:** **Correção do Anexo de Imagem no WhatsApp Web (`src/whatsapp/wa-playwright.ts`):**
+  - Atualizada a seleção do campo `input[type="file"]` para interagir com elementos ocultos pelo CSS do WhatsApp Web sem expirar por timeout de visibilidade.
+  - Adicionado expurgo preventivo de locks de navegador concorrentes antes de iniciar novos disparos manuais.
 - **04/08/2026 - 03:53:** **Implementação Completa do Módulo de Automação do Instagram (`src/instagram/ig-poster.ts` e `public/index.html`):**
   - **Aba Dedicada "📸 Automação Instagram"**: Adicionada no Painel Web com alternador de ativação, campos para Username/Email, Limite de Posts por Ciclo, Link da Bio / Grupo VIP e Bloco de Hashtags Personalizadas salvas no Neon PostgreSQL.
   - **Copywriter de Alto Engajamento Orgânico (`src/formatter/instagram.ts`)**: Estruturado com ganchos visuais para os primeiros 3 segundos, destaque de descontos, instrução de CTA em 2 passos (*"Comente OFERTA ou clique no Link da Bio"*) e conjunto estratégico de hashtags do algoritmo da Meta.
