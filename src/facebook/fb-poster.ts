@@ -94,9 +94,8 @@ export async function openFacebookBrowser(): Promise<BrowserContext> {
 
   cleanProfileLock(FB_PROFILE_DIR);
 
-  const context = await chromium.launchPersistentContext(FB_PROFILE_DIR, {
+  const contextOptions: any = {
     headless: isCloud,
-    executablePath,
     locale: 'pt-BR',
     viewport: { width: 1366, height: 768 },
     args: [
@@ -106,7 +105,21 @@ export async function openFacebookBrowser(): Promise<BrowserContext> {
       '--disable-dev-shm-usage',
     ],
     ignoreDefaultArgs: ['--enable-automation'],
-  });
+  };
+
+  if (executablePath && !isCloud) {
+    contextOptions.executablePath = executablePath;
+  }
+
+  let context: BrowserContext;
+  try {
+    context = await chromium.launchPersistentContext(FB_PROFILE_DIR, contextOptions);
+  } catch (launchErr) {
+    console.warn('[FB] Aviso ao abrir com Chrome do sistema. Expurgando lock e relançando...', launchErr);
+    cleanProfileLock(FB_PROFILE_DIR);
+    delete contextOptions.executablePath;
+    context = await chromium.launchPersistentContext(FB_PROFILE_DIR, contextOptions);
+  }
 
   activeFbContext = context;
 
@@ -673,8 +686,8 @@ export async function postOffersToFacebookGroups(
       await autoDiscoverAndJoinFacebookGroups(page, 1);
     }
 
-    // Recarrega dinamicamente a lista de grupos e o limite do .env atualizados
-    if (existsSync(join(process.cwd(), '.env'))) {
+    // Recarrega dinamicamente a lista de grupos se for ciclo normal (não teste de 1 grupo)
+    if (maxGroupsPerCycle > 1 && existsSync(join(process.cwd(), '.env'))) {
       const envContent = readFileSync(join(process.cwd(), '.env'), 'utf-8');
       const updatedUrlsMatch = envContent.match(/^FB_GROUP_URLS=(.*)$/m);
       if (updatedUrlsMatch && updatedUrlsMatch[1].trim()) {

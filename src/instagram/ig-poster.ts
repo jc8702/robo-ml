@@ -15,16 +15,27 @@ if (!existsSync(TEMP_IMG_DIR)) {
   mkdirSync(TEMP_IMG_DIR, { recursive: true });
 }
 
+import { execSync } from 'node:child_process';
+
 function cleanProfileLock(profileDir: string) {
+  try {
+    const folderName = profileDir.split(/[\\/]/).pop();
+    if (folderName) {
+      const psCommand = `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"name='chrome.exe'\\" | Where-Object CommandLine -like '*${folderName}*' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"`;
+      execSync(psCommand, { stdio: 'ignore' });
+      try {
+        execSync('timeout /t 1 /nobreak > nul', { stdio: 'ignore' });
+      } catch {}
+    }
+  } catch {}
+
   const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lockfile'];
   for (const lockFile of lockFiles) {
     const lockPath = join(profileDir, lockFile);
     if (existsSync(lockPath)) {
       try {
         unlinkSync(lockPath);
-      } catch {
-        // Se estiver bloqueado por outro processo, ignora
-      }
+      } catch {}
     }
   }
 }
@@ -64,9 +75,18 @@ export async function openInstagramBrowser(): Promise<BrowserContext> {
     contextOptions.executablePath = executablePath;
   }
 
-  const context = await chromium.launchPersistentContext(IG_PROFILE_DIR, contextOptions);
-  activeIgContext = context;
-  return context;
+  try {
+    const context = await chromium.launchPersistentContext(IG_PROFILE_DIR, contextOptions);
+    activeIgContext = context;
+    return context;
+  } catch (launchErr) {
+    console.warn('[IG] Aviso ao abrir com Chrome do sistema. Tentando expurgar lock e relançar...', launchErr);
+    cleanProfileLock(IG_PROFILE_DIR);
+    delete contextOptions.executablePath;
+    const context = await chromium.launchPersistentContext(IG_PROFILE_DIR, contextOptions);
+    activeIgContext = context;
+    return context;
+  }
 }
 
 function randomDelay(minMs = 1500, maxMs = 3500): Promise<void> {
@@ -119,112 +139,294 @@ export async function postOfferToInstagram(
     await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 45000 });
     await randomDelay(3000, 5000);
 
+    // Trata popups de Cookies e "Agora não"
+    const cookieBtn = page.locator('button:has-text("Allow all cookies"), button:has-text("Permitir todos os cookies"), button:has-text("Aceitar"), button:has-text("Accept")').first();
+    if (await cookieBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await cookieBtn.click().catch(() => {});
+      await randomDelay(1000, 2000);
+    }
+
+    const notNowBtn = page.locator('button:has-text("Agora não"), button:has-text("Not Now"), button:has-text("Salvar informações")').first();
+    if (await notNowBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await notNowBtn.click().catch(() => {});
+      await randomDelay(1000, 2000);
+    }
+
     // Verifica se está logado
-    const isLoggedOut = await page.locator('input[name="username"], input[aria-label*="Phone number, username"]').isVisible().catch(() => false);
+    const currentUrl = page.url();
+    const hasLoginForm = await page.locator('input[name="username"], input[name="password"], form#loginForm').isVisible({ timeout: 4000 }).catch(() => false);
+    const isLoggedOut = currentUrl.includes('/accounts/login') || hasLoginForm;
+
     if (isLoggedOut) {
-      console.log('  ⚠️ Instagram não está logado no navegador. Conecte sua conta usando a ferramenta "Conectar-Instagram.bat" ou acesse a tela visual.');
-      return false;
-    }
+      console.log('');
+      console.log('  ╔═══════════════════════════════════════════════════╗');
+      console.log('  ║  🆕 LOGIN NO INSTAGRAM NECESSÁRIO                 ║');
+      console.log('  ║                                                   ║');
+      console.log('  ║  O navegador abriu no Instagram. Faça seu login:  ║');
+      console.log('  ║  1. Digite seu usuário/e-mail e senha             ║');
+      console.log('  ║  2. Complete a verificação 2FA (se ativada)       ║');
+      console.log('  ║  3. A automação continuará automaticamente!       ║');
+      console.log('  ║                                                   ║');
+      console.log('  ║  ⏱️  Aguardando até 3 minutos pelo login...        ║');
+      console.log('  ╚═══════════════════════════════════════════════════╝');
+      console.log('');
 
-    // 3. Clica no botão de Criar Nova Publicação (+)
-    console.log('  ➕ Abrindo criador de nova publicação (+)...');
-    const createBtnSelectors = [
-      'svg[aria-label="Nova publicação"]',
-      'svg[aria-label="New post"]',
-      'svg[aria-label="Criar"]',
-      'svg[aria-label="Create"]',
-      '[aria-label="Nova publicação"]',
-      '[aria-label="New post"]',
-      '[aria-label="Criar"]',
-    ];
-
-    let clickedCreate = false;
-    for (const sel of createBtnSelectors) {
       try {
-        const el = page.locator(sel).first();
-        if (await el.isVisible({ timeout: 3000 })) {
-          await el.click();
-          clickedCreate = true;
-          break;
-        }
-      } catch { /* próximo */ }
-    }
-
-    if (!clickedCreate) {
-      const textBtn = page.locator('text="Criar", text="Create"').first();
-      if (await textBtn.isVisible({ timeout: 2000 })) {
-        await textBtn.click();
-        clickedCreate = true;
+        await page.waitForSelector('svg[aria-label="Nova publicação"], svg[aria-label="New post"], svg[aria-label="Criar"], svg[aria-label="Create"], [aria-label="Nova publicação"], a[href*="create"], a[href*="/explore/"]', {
+          timeout: 180000,
+        });
+        console.log('  ✅ Login no Instagram detectado com sucesso!');
+        await randomDelay(3000, 5000);
+      } catch {
+        console.log('  ⏰ Tempo esgotado para login no Instagram. Pulando postagem.');
+        return false;
       }
     }
 
-    if (!clickedCreate) {
-      console.log('  ❌ Não foi possível encontrar o botão (+) de criar publicação no Instagram.');
+    // Trata popups adicionais de Notificações / Informações de login se presentes
+    const popupCloseSelectors = [
+      'button:has-text("Agora não")',
+      'button:has-text("Not Now")',
+      'button:has-text("Salvar informações")',
+      'button:has-text("Save Info")',
+      'button:has-text("Cancelar")',
+      'button:has-text("Cancel")'
+    ];
+    for (const sel of popupCloseSelectors) {
+      try {
+        const btn = page.locator(sel).first();
+        if (await btn.isVisible({ timeout: 1500 }).catch(() => false)) {
+          await btn.click({ force: true }).catch(() => {});
+          await randomDelay(1000, 1500);
+        }
+      } catch {}
+    }
+
+    // 3. Clica no botão de Criar Nova Publicação (+ Criar) na barra lateral
+    console.log('  ➕ Abrindo criador de nova publicação (+)...');
+    let modalOpened = false;
+
+    // Clica no link "Criar" / "Create" na sidebar
+    try {
+      const linkEl = page.locator('a:has-text("Criar"), a:has-text("Create")').first();
+      if (await linkEl.isVisible({ timeout: 3000 }).catch(() => false)) {
+        console.log('  🎯 Clicando no link Criar...');
+        await linkEl.evaluate((el: HTMLElement) => el.click());
+        await randomDelay(2000, 3000);
+      }
+    } catch {}
+
+    // O submenu que abre tem "Postar", "Vídeo ao vivo", "Anúncio", "IA"
+    // Precisa clicar em "Postar" / "Post" — usar page.getByText para exatidão
+    try {
+      // Tenta com getByText exato
+      let postClicked = false;
+      for (const label of ['Postar', 'Post']) {
+        const el = page.getByText(label, { exact: true }).first();
+        if (await el.isVisible({ timeout: 2000 }).catch(() => false)) {
+          console.log(`  📌 Clicando na opção "${label}"...`);
+          const box = await el.boundingBox().catch(() => null);
+          if (box) {
+            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+            postClicked = true;
+            await randomDelay(2000, 3000);
+            break;
+          }
+        }
+      }
+      if (!postClicked) {
+        console.log('  ⚠️ Opção "Postar" não encontrada no submenu.');
+      }
+    } catch {}
+
+    // Espera pelo dialog/modal — Instagram usa role="dialog" OU role="presentation"
+    try {
+      await page.waitForSelector('div[role="dialog"], div[role="presentation"]:has(input[type="file"]), div[role="presentation"]:has(button)', { timeout: 8000 });
+      // Verifica se tem input[type="file"] ou botão "Selecionar do computador" como indicativo de modal de upload
+      const hasFileInput = await page.locator('input[type="file"]').isVisible({ timeout: 2000 }).catch(() => false);
+      const hasSelectBtn = await page.locator('button:has-text("Selecionar do computador"), button:has-text("Select from computer"), button:has-text("Selecionar"), button:has-text("Select")').first().isVisible({ timeout: 2000 }).catch(() => false);
+      const hasDialog = await page.locator('div[role="dialog"]').isVisible().catch(() => false);
+      
+      if (hasFileInput || hasSelectBtn || hasDialog) {
+        modalOpened = true;
+        console.log(`  ✅ Modal de criação aberto! (fileInput=${hasFileInput}, selectBtn=${hasSelectBtn}, dialog=${hasDialog})`);
+      }
+    } catch {
+      modalOpened = false;
+    }
+
+    if (!modalOpened) {
+      await page.screenshot({ path: 'ig-debug.png', fullPage: true }).catch(() => {});
+      console.log('  ⚠️ Não foi possível abrir o modal de criação no Instagram. Screenshot ig-debug.png salvo.');
       return false;
     }
 
-    await randomDelay(2000, 3000);
+    await randomDelay(2000, 3500);
 
     // 4. Seleciona o arquivo de imagem do computador
     console.log('  🖼️ Selecionando arquivo de imagem...');
-    const fileChooserPromise = page.waitForEvent('filechooser', { timeout: 15000 });
+    await randomDelay(1000, 2000);
 
-    const selectFromComputerBtn = page.locator('button:has-text("Selecionar do computador"), button:has-text("Select from computer")').first();
-    if (await selectFromComputerBtn.isVisible({ timeout: 3000 })) {
-      await selectFromComputerBtn.click();
-    } else {
-      await page.locator('div[role="dialog"] input[type="file"]').setInputFiles(localImagePath).catch(() => {});
+    let uploaded = false;
+
+    // Método 1: setInputFiles no input[type="file"] visível na página
+    try {
+      const fileInput = page.locator('input[type="file"]').first();
+      await fileInput.setInputFiles(localImagePath, { timeout: 10000 });
+      uploaded = true;
+      console.log('  ✅ Imagem carregada via setInputFiles!');
+    } catch (err) {
+      console.warn('  ⚠️ setInputFiles falhou, tentando clique no botão visual...');
     }
 
-    const fileChooser = await fileChooserPromise.catch(() => null);
-    if (fileChooser) {
-      await fileChooser.setFiles(localImagePath);
+    // Método 2: filechooser ao clicar no botão "Selecionar do computador"
+    if (!uploaded) {
+      const selectBtn = page.locator('button:has-text("Selecionar do computador"), button:has-text("Select from computer"), button:has-text("Selecionar"), button:has-text("Select from")').first();
+      if (await selectBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
+        try {
+          const [fileChooser] = await Promise.all([
+            page.waitForEvent('filechooser', { timeout: 10000 }),
+            selectBtn.click()
+          ]);
+          if (fileChooser) {
+            await fileChooser.setFiles(localImagePath);
+            uploaded = true;
+            console.log('  ✅ Imagem selecionada via filechooser!');
+          }
+        } catch (fcErr) {
+          console.warn('  ⚠️ Filechooser falhou:', fcErr);
+        }
+      }
     }
-    await randomDelay(2500, 4000);
+
+    if (!uploaded) {
+      await page.screenshot({ path: 'ig-debug-upload.png' }).catch(() => {});
+      console.log('  ⚠️ Não foi possível carregar a imagem no Instagram. Screenshot ig-debug-upload.png salvo.');
+      return false;
+    }
+
+    await randomDelay(3000, 5000);
 
     // 5. Clica em "Avançar" / "Next" (Corte/Proporção)
     console.log('  ➡️ Avançando tela de ajuste de foto...');
-    const nextBtn1 = page.locator('div[role="dialog"] button:has-text("Avançar"), div[role="dialog"] button:has-text("Next")').first();
-    if (await nextBtn1.isVisible({ timeout: 5000 })) {
-      await nextBtn1.click();
-      await randomDelay(2000, 3000);
+    for (const label of ['Avançar', 'Next']) {
+      const el = page.getByText(label, { exact: true }).first();
+      if (await el.isVisible({ timeout: 5000 }).catch(() => false)) {
+        const box = await el.boundingBox().catch(() => null);
+        if (box) {
+          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+          console.log(`  ✅ Clicou em "${label}" (Corte)`);
+          await randomDelay(2000, 4000);
+          break;
+        }
+      }
     }
 
     // 6. Clica em "Avançar" / "Next" (Filtros)
     console.log('  ➡️ Avançando tela de filtros...');
-    const nextBtn2 = page.locator('div[role="dialog"] button:has-text("Avançar"), div[role="dialog"] button:has-text("Next")').first();
-    if (await nextBtn2.isVisible({ timeout: 5000 })) {
-      await nextBtn2.click();
-      await randomDelay(2000, 3000);
+    for (const label of ['Avançar', 'Next']) {
+      const el = page.getByText(label, { exact: true }).first();
+      if (await el.isVisible({ timeout: 5000 }).catch(() => false)) {
+        const box = await el.boundingBox().catch(() => null);
+        if (box) {
+          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+          console.log(`  ✅ Clicou em "${label}" (Filtros)`);
+          await randomDelay(2000, 4000);
+          break;
+        }
+      }
     }
 
     // 7. Escreve a legenda persuasiva de alto engajamento
     console.log('  ✍️ Digitando legenda formatada...');
     const captionText = formatInstagramCaption(offer, options?.bioLink, options?.hashtags);
 
-    const captionBox = page.locator('div[role="dialog"] div[aria-label*="Escreva uma legenda"], div[role="dialog"] div[aria-label*="Write a caption"], div[role="dialog"] div[contenteditable="true"]').first();
-    if (await captionBox.isVisible({ timeout: 5000 })) {
-      await captionBox.click();
-      await randomDelay(500, 1000);
-      await page.keyboard.type(captionText, { delay: 5 });
-      await randomDelay(1500, 2500);
-    } else {
-      console.log('  ⚠️ Caixa de legenda não encontrada no Instagram.');
+    // Tenta vários seletores para a caixa de legenda
+    let captionFound = false;
+    const captionSelectors = [
+      'div[aria-label*="Escreva uma legenda"]',
+      'div[aria-label*="Write a caption"]',
+      'div[contenteditable="true"]',
+      'textarea[aria-label*="legenda"]',
+      'textarea[aria-label*="caption"]',
+      'p[data-lexical-text="true"]',
+    ];
+    for (const sel of captionSelectors) {
+      const el = page.locator(sel).first();
+      if (await el.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await el.click();
+        await randomDelay(500, 1000);
+        await page.keyboard.type(captionText, { delay: 5 });
+        captionFound = true;
+        console.log(`  ✅ Legenda digitada! (seletor: ${sel})`);
+        await randomDelay(1500, 2500);
+        break;
+      }
+    }
+    if (!captionFound) {
+      await page.screenshot({ path: 'ig-debug-caption.png' }).catch(() => {});
+      console.log('  ⚠️ Caixa de legenda não encontrada. Screenshot ig-debug-caption.png salvo.');
     }
 
     // 8. Clica em "Compartilhar" / "Share"
     console.log('  🚀 Compartilhando publicação no Instagram...');
-    const shareBtn = page.locator('div[role="dialog"] button:has-text("Compartilhar"), div[role="dialog"] button:has-text("Share")').first();
-    if (await shareBtn.isVisible({ timeout: 5000 })) {
-      await shareBtn.click();
-      console.log('  ⏳ Processando publicação...');
-      await randomDelay(6000, 9000);
-      console.log('  ✅ Oferta publicada com sucesso no Instagram!');
-      return true;
-    } else {
-      console.log('  ❌ Botão Compartilhar não localizado.');
+
+    // Fecha sugestões de hashtags que podem estar sobrepostas
+    await page.keyboard.press('Escape').catch(() => {});
+    await randomDelay(1000, 1500);
+    // Clica fora da caixa de texto para deselecionar
+    await page.mouse.click(400, 120).catch(() => {});
+    await randomDelay(1000, 1500);
+
+    let shared = false;
+    // Tenta múltiplas abordagens para clicar em "Compartilhar"
+    // Abordagem 1: getByText com exact
+    for (const label of ['Compartilhar', 'Share']) {
+      const el = page.getByText(label, { exact: true }).first();
+      if (await el.isVisible({ timeout: 3000 }).catch(() => false)) {
+        const box = await el.boundingBox().catch(() => null);
+        if (box) {
+          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+          shared = true;
+          console.log(`  ⏳ Clicou em "${label}" — processando publicação...`);
+          break;
+        }
+      }
+    }
+
+    // Abordagem 2: locator com role="button" ou div/span
+    if (!shared) {
+      const selectors = [
+        'div[role="button"]:has-text("Compartilhar")',
+        'div[role="button"]:has-text("Share")',
+        'span:has-text("Compartilhar")',
+        'span:has-text("Share")',
+        'a:has-text("Compartilhar")',
+      ];
+      for (const sel of selectors) {
+        const el = page.locator(sel).first();
+        if (await el.isVisible({ timeout: 2000 }).catch(() => false)) {
+          const box = await el.boundingBox().catch(() => null);
+          if (box) {
+            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+            shared = true;
+            console.log(`  ⏳ Clicou em Compartilhar via ${sel}`);
+            break;
+          }
+        }
+      }
+    }
+
+    if (!shared) {
+      await page.screenshot({ path: 'ig-debug-share.png' }).catch(() => {});
+      console.log('  ❌ Botão Compartilhar não localizado. Screenshot ig-debug-share.png salvo.');
       return false;
     }
+
+    await randomDelay(8000, 12000);
+    console.log('  ✅ Oferta publicada com sucesso no Instagram!');
+
+    return true;
   } catch (err) {
     console.error(`  ❌ Erro ao postar oferta no Instagram: ${err}`);
     return false;

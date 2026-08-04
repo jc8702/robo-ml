@@ -31,63 +31,62 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
   // Recarrega config do Neon a cada ciclo para pegar alterações feitas pelo painel web
   const config = await loadConfigAsync();
 
-  console.log(`\n[CRON] [${new Date().toLocaleTimeString('pt-BR')}] Iniciando ciclo automatico de ofertas...`);
+  console.log(`\n[CRON] [${new Date().toLocaleTimeString('pt-BR')}] Iniciando ciclo automático de ofertas...`);
 
   const groupJid = process.env.WHATSAPP_GROUP_ID;
-
-  if (!groupJid) {
-    console.error('[CRON] WHATSAPP_GROUP_ID nao configurado no .env! O envio automatico precisa do ID do grupo.');
-    console.log('[CRON] Execute "npm run list-groups" para ver os IDs dos seus grupos.');
-    return;
-  }
 
   const offers = await collectOffers(config.queries, config);
 
   if (offers.length === 0) {
-    console.log('[CRON] Nenhuma oferta nova encontrada neste ciclo (ou todas ja foram enviadas recentemente).');
+    console.log('[CRON] Nenhuma oferta nova encontrada neste ciclo (ou todas já foram enviadas recentemente).');
     return;
   }
 
-  console.log(`\n[CRON] ${offers.length} ofertas coletadas. Enviando para o WhatsApp...`);
+  console.log(`\n[CRON] ${offers.length} ofertas coletadas e preparadas.`);
 
   const affiliateOffers = await convertOffers(offers, config);
 
-  const sentOffers: {
-    permalink: string;
-    title: string;
-    currentPrice?: number;
-    originalPrice?: number;
-    discountPercent?: number;
-    imageUrl?: string;
-  }[] = [];
-
-  for (let i = 0; i < affiliateOffers.length; i++) {
-    const offer = affiliateOffers[i];
-    const sent = await sendOfferWithPhoto(offer, groupJid);
-    if (sent) {
-      sentOffers.push({
-        permalink: offer.permalink,
-        title: offer.title,
-        currentPrice: offer.currentPrice,
-        originalPrice: offer.originalPrice,
-        discountPercent: offer.discountPercent,
-        imageUrl: offer.thumbnail,
-      });
-    }
-
-    if (i < affiliateOffers.length - 1) {
-      await new Promise((r) => setTimeout(r, 3000));
-    }
+  // 1. Grava no Histórico Global (Neon DB + .sent-history.json) imediatamente após a coleta
+  try {
+    const historyPayload = affiliateOffers.map(offer => ({
+      permalink: offer.permalink,
+      title: offer.title,
+      currentPrice: offer.currentPrice,
+      originalPrice: offer.originalPrice,
+      discountPercent: offer.discountPercent,
+      imageUrl: offer.thumbnail,
+    }));
+    saveSentOffersToHistory(historyPayload);
+    console.log(`[CRON] 💾 ${historyPayload.length} oferta(s) salvas no histórico global (Neon DB / .sent-history.json).`);
+  } catch (histErr) {
+    console.error('[CRON] Erro ao salvar histórico:', histErr);
   }
 
-  if (sentOffers.length > 0) {
-    saveSentOffersToHistory(sentOffers);
+  // 2. Disparo para o WhatsApp (Isolado em try/catch)
+  if (groupJid) {
+    console.log(`\n📱 [WHATSAPP] Enviando ${affiliateOffers.length} ofertas para o grupo...`);
+    try {
+      let sentCount = 0;
+      for (let i = 0; i < affiliateOffers.length; i++) {
+        const offer = affiliateOffers[i];
+        const sent = await sendOfferWithPhoto(offer, groupJid);
+        if (sent) sentCount++;
+
+        if (i < affiliateOffers.length - 1) {
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
+      console.log(`📱 [WHATSAPP] Concluído: ${sentCount} de ${affiliateOffers.length} ofertas enviadas com sucesso!`);
+    } catch (waErr) {
+      console.error('❌ [WHATSAPP] Erro na automação do WhatsApp:', waErr);
+    }
+  } else {
+    console.log('⚠️ [WHATSAPP] WHATSAPP_GROUP_ID não configurado no .env. Pulando envio do WhatsApp e continuando para FB/IG...');
   }
 
-  console.log(`[CRON] WhatsApp: ${sentOffers.length} ofertas enviadas com sucesso!`);
-
-  if (config.facebook.enabled && config.facebook.groupUrls.length > 0) {
-    console.log('\n[FB] Iniciando postagem nos grupos do Facebook...');
+  // 3. Postagem nos Grupos do Facebook (Isolado em try/catch)
+  if (config.facebook && config.facebook.enabled && config.facebook.groupUrls.length > 0) {
+    console.log('\n📘 [FACEBOOK] Iniciando postagem nos grupos do Facebook...');
     try {
       const fbResult = await postOffersToFacebookGroups(
         affiliateOffers,
@@ -96,20 +95,19 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
         config.facebook.delayBetweenPostsSec,
         config.facebook.waGroupLink
       );
-      console.log(`[FB] Facebook concluido: ${fbResult.success} publicados, ${fbResult.failed} falharam.`);
+      console.log(`📘 [FACEBOOK] Concluído: ${fbResult.success} publicados, ${fbResult.failed} falharam.`);
     } catch (fbError) {
-      console.error('[FB] Erro na automacao do Facebook:', fbError);
-      console.log('[FB] WhatsApp foi enviado normalmente. Apenas o Facebook falhou.');
+      console.error('❌ [FACEBOOK] Erro na automação do Facebook:', fbError);
     }
-  } else if (config.facebook.enabled && config.facebook.groupUrls.length === 0) {
-    console.log('\n[FB] Facebook habilitado mas nenhum grupo configurado. Adicione FB_GROUP_URLS no .env.');
+  } else if (config.facebook && config.facebook.enabled && config.facebook.groupUrls.length === 0) {
+    console.log('⚠️ [FACEBOOK] Facebook habilitado mas nenhum grupo configurado. Adicione FB_GROUP_URLS no .env.');
   }
 
-  // 3. Postagem no Instagram (Feed / Posts de Alto Impacto Orgânico)
+  // 4. Postagem no Instagram (Feed / Posts de Alto Impacto Orgânico) (Isolado em try/catch)
   if (config.instagram && config.instagram.enabled) {
     console.log('\n📸 [INSTAGRAM] Iniciando postagem automática no Instagram...');
     try {
-      const { postOfferToInstagram } = await import('../instagram/ig-poster');
+      const { postOfferToInstagram } = await import('../instagram/ig-poster.js');
       const maxIg = config.instagram.maxPostsPerCycle || 3;
       const igOffers = affiliateOffers.slice(0, maxIg);
       let countIg = 0;
@@ -127,7 +125,7 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
     }
   }
 
-  console.log(`\n[CRON] Ciclo concluido! Proximo envio agendado.\n`);
+  console.log(`\n[CRON] Ciclo concluído! Próximo envio agendado.\n`);
 }
 
 export async function startScheduler(config: AppConfig): Promise<void> {

@@ -1,11 +1,24 @@
 # RESUMO DE PROJETO: ML Ofertas Bot
 
 ## Informações Gerais
-- **Status Atual:** Loop 401 do WhatsApp corrigido em definitivo; Scraping do Mercado Livre otimizado com suporte a /ofertas e Postagem Sequencial em Grupos do Facebook validada 100%.
+- **Status Atual:** Auditoria completa realizada. Identificadas causas raiz de acoplamento do pipeline (WhatsApp interrompendo FB/IG/Histórico), ausência de rota dedicada para teste do Instagram e fatores de execução 24/7. Funcionalidades reais confirmadas (não moscadas/mockadas).
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
-- **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp e **grupos do Facebook**.
-- **Última Atualização:** 04/08/2026 - 01:19
+- **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
+- **Última Atualização:** 04/08/2026 - 08:38
 
+- **04/08/2026 - 08:38:** **🔍 AUDITORIA TÉCNICA COMPLETA DE DIAGNÓSTICO DO PROJETO:**
+  - **Execução 24/7**: Identificado que o processo depende da máquina estar ligada se rodar localmente. No Render (plano gratuito), a instância entra em *spin-down* (hibernação) após 15 minutos sem tráfego HTTP. Além disso, se o ID do WhatsApp não estivesse setado ou 0 ofertas fossem coletadas, o ciclo encerrava precocemente.
+  - **Postagem no Instagram**: O módulo Playwright é real, mas ficava no final do pipeline em `cron.ts`. Se o WhatsApp ou scraping tivessem 0 itens novos, a execução retornava antes de chegar no Instagram.
+  - **Botão "Testar Instagram" no Painel**: O botão chamava `/api/bot/run-now` (execução completa de scraping) em vez de uma rota de teste isolada para o Instagram (pois a rota nem existia no `server.ts`).
+  - **Histórico no Painel**: A gravação no banco Neon DB e `.sent-history.json` só ocorria se a postagem do WhatsApp fosse 100% bem-sucedida (`sentOffers.length > 0`). Falhas ou pulos do WhatsApp deixavam o histórico vazio.
+  - **Conclusão de Mocks**: As funcionalidades **NÃO são mockadas** (são robôs Playwright reais, conectores de API e banco de dados Neon). O problema era o acoplamento sequencial síncrono e a falta de endpoints de teste dedicados.
+  - Submenu "Postar" (não "Publicação"), modal `role=presentation`, botões via `getByText` + `mouse.click` por coordenadas
+  - Dismiss de hashtag suggestions, Compartilhar via `div[role=button]`
+  - Arquivos modificados: `src/instagram/ig-poster.ts`
+
+  - **Aviso Interativo de Login (3 Minutos)**: Se a sessão em `.ig-profile/` não estiver pareada, o robô abre o navegador Chrome na tela do usuário, exibe a instrução no terminal e aguarda até 3 minutos pelo login para não falhar silenciosamente.
+  - **Expurgo Direcionado de Locks (`cleanProfileLock`)**: Implementado encerramento direcionado via PowerShell (`Get-CimInstance Stop-Process`) para processos `chrome.exe` atrelados ao `.ig-profile`, liberando a porta `ProcessSingleton` sem fechar o navegador pessoal do usuário.
+  - **Seletor Dual de Imagem no Modal**: Atualizado o fluxo do Playwright para validar a visibilidade do modal `div[role="dialog"]` e efetuar o upload da foto em HD tanto via `setInputFiles` quanto via interceptação `filechooser`.
 - **04/08/2026 - 04:05:** **Ativação Padrão da Automação 24/7 do Instagram (`.env` e Neon PostgreSQL):**
   - Sincronizadas as variáveis `INSTAGRAM_ENABLED=true`, `INSTAGRAM_USERNAME=gc19ofertass`, `INSTAGRAM_MAX_POSTS_PER_CYCLE=3`, `INSTAGRAM_BIO_LINK` e `INSTAGRAM_HASHTAGS` no arquivo `.env` e na tabela `app_settings` do banco Neon DB.
   - O Instagram passa a fazer parte da esteira padrão em todas as varreduras agendadas (Cron) sem necessidade de configuração manual pós-deploy.

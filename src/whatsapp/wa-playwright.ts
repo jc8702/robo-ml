@@ -32,8 +32,7 @@ export async function openWhatsAppBrowser(): Promise<{ context: BrowserContext; 
 
   console.log(`[WA-PLAYWRIGHT] Iniciando navegador Chrome (Headless: ${isCloud})...`);
 
-  context = await chromium.launchPersistentContext(WA_PROFILE_DIR, {
-    executablePath,
+  const contextOptions: any = {
     headless: isCloud,
     viewport: { width: 1280, height: 800 },
     userAgent:
@@ -44,7 +43,19 @@ export async function openWhatsAppBrowser(): Promise<{ context: BrowserContext; 
       '--disable-dev-shm-usage',
       '--disable-blink-features=AutomationControlled',
     ],
-  });
+  };
+
+  if (executablePath && !isCloud) {
+    contextOptions.executablePath = executablePath;
+  }
+
+  try {
+    context = await chromium.launchPersistentContext(WA_PROFILE_DIR, contextOptions);
+  } catch (launchErr) {
+    console.warn('[WA-PLAYWRIGHT] Aviso ao abrir com Chrome do sistema. Expurgando lock e relançando...', launchErr);
+    delete contextOptions.executablePath;
+    context = await chromium.launchPersistentContext(WA_PROFILE_DIR, contextOptions);
+  }
 
   const pages = context.pages();
   waPage = pages.length > 0 ? pages[0] : await context.newPage();
@@ -175,7 +186,7 @@ export async function sendOfferWithPhotoPlaywright(
         }
 
         if (captionBox) {
-          await captionBox.click();
+          await captionBox.click({ force: true }).catch(() => captionBox.focus().catch(() => {}));
           await page.keyboard.insertText(caption);
           await page.waitForTimeout(1000);
         }
@@ -193,7 +204,7 @@ export async function sendOfferWithPhotoPlaywright(
           try {
             const btn = page.locator(sel).first();
             if (await btn.isVisible({ timeout: 2000 })) {
-              await btn.click();
+              await btn.click({ force: true });
               sentOk = true;
               break;
             }

@@ -1478,21 +1478,19 @@
     const btnTestIg = document.getElementById('btnTestIg');
     if (btnTestIg) {
       btnTestIg.addEventListener('click', async () => {
-        log('📸 Disparando teste de postagem no Instagram...');
+        log('📸 Disparando teste isolado de postagem no Instagram...');
         btnTestIg.disabled = true;
-        btnTestIg.textContent = '⏳ Postando no Instagram...';
+        btnTestIg.textContent = '⏳ Publicando no Instagram...';
         try {
-          const res = await fetch('/api/bot/run-now', { method: 'POST' });
+          const res = await fetch('/api/bot/test-instagram', { method: 'POST' });
           const data = await res.json();
           log(data.message);
-          showToast('Execução iniciada! Verifique o console do servidor.', 'success');
+          showToast(data.message, data.success ? 'success' : 'error');
         } catch {
-          showToast('Erro ao disparar teste no Instagram', 'error');
+          showToast('Erro de conexão ao disparar teste no Instagram', 'error');
         } finally {
-          setTimeout(() => {
-            btnTestIg.disabled = false;
-            btnTestIg.textContent = '📸 Testar Postagem Instagram';
-          }, 4000);
+          btnTestIg.disabled = false;
+          btnTestIg.textContent = '📸 Testar Postagem Instagram';
         }
       });
     }

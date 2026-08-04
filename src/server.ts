@@ -330,10 +330,62 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
     try {
       const config = await loadConfigAsync();
       await runAutomaticCycle(config);
-      return sendJson({ success: true, message: '⚡ Varredura executada com sucesso! Ofertas enviadas para o WhatsApp e Facebook.' });
+      return sendJson({ success: true, message: '⚡ Varredura executada com sucesso! Ofertas enviadas para WhatsApp, Facebook e Instagram.' });
     } catch (err) {
       console.error('[SERVER] Erro na execução manual:', err);
       return sendJson({ success: false, message: 'Erro na execução da varredura: ' + String(err) }, 500);
+    }
+  }
+
+  // POST /api/bot/test-instagram (ou /api/instagram/test)
+  if (method === 'POST' && (url === '/api/bot/test-instagram' || url === '/api/instagram/test' || url.endsWith('/test-instagram'))) {
+    try {
+      const config = await loadConfigAsync();
+      const { postOfferToInstagram } = await import('./instagram/ig-poster.js');
+
+      const history = await getSentOffersHistoryFromDb();
+      const testOffer: any = history.length > 0 ? {
+        id: history[0].id,
+        title: history[0].title,
+        currentPrice: history[0].currentPrice || history[0].price || 199.90,
+        originalPrice: history[0].originalPrice || 299.90,
+        discountPercent: history[0].discountPercent || 33,
+        permalink: history[0].permalink || history[0].link,
+        affiliateLink: history[0].permalink || history[0].link,
+        thumbnail: history[0].imageUrl || history[0].thumbnail || 'https://http2.mlstatic.com/D_NQ_NP_2X_704701-MLA45648833919_042021-F.webp',
+        freeShipping: true,
+        seller: 'Loja Oficial Mercado Livre',
+        condition: 'new',
+        soldQuantity: 100,
+      } : {
+        id: 'test-ig-' + Date.now(),
+        title: 'Fone de Ouvido Bluetooth Sem Fio Estéreo HD',
+        currentPrice: 99.90,
+        originalPrice: 199.90,
+        discountPercent: 50,
+        permalink: 'https://www.mercadolivre.com.br/p/MLB66328445',
+        affiliateLink: 'https://www.mercadolivre.com.br/p/MLB66328445',
+        thumbnail: 'https://http2.mlstatic.com/D_Q_NP_2X_696276-MLA107581697270_032026-F.webp',
+        freeShipping: true,
+        seller: 'Vendedor Oficial',
+        condition: 'new',
+        soldQuantity: 100
+      };
+
+      console.log('[SERVER] 📸 Disparando teste isolado de postagem no Instagram...');
+      const success = await postOfferToInstagram(testOffer, {
+        bioLink: config.instagram.bioLink,
+        hashtags: config.instagram.customHashtags,
+      });
+
+      if (success) {
+        return sendJson({ success: true, message: '✅ Postagem de teste enviada e publicada com sucesso no Instagram!' });
+      } else {
+        return sendJson({ success: false, message: '❌ Não foi possível concluir a postagem no Instagram. Verifique se o perfil em .ig-profile/ está logado no Instagram.' }, 400);
+      }
+    } catch (err) {
+      console.error('[SERVER] Erro ao testar Instagram:', err);
+      return sendJson({ success: false, message: 'Erro ao executar teste do Instagram: ' + String(err) }, 500);
     }
   }
 
