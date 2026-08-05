@@ -10,6 +10,7 @@ import { getSentOffersHistoryFromDb, clearSentHistory } from './collector/histor
 import { checkWhatsAppSessionStatus, ensureWhatsAppLoggedIn } from './whatsapp/wa-playwright.js';
 import { checkFacebookSessionStatus, openFacebookBrowser } from './facebook/fb-poster.js';
 import { checkInstagramSessionStatus, openInstagramBrowser } from './instagram/ig-poster.js';
+import { getMercadoLivreCategoryCacheInfo, getMercadoLivreCategoryQuery, loadMercadoLivreCategoryCatalog } from './ml/categories.js';
 
 
 
@@ -100,6 +101,16 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
     });
     res.end();
     return;
+  }
+
+  // Catálogo oficial MLB completo, usado pelo painel para seleção folha a folha.
+  if (method === 'GET' && (url === '/api/ml/categories' || url.endsWith('/ml/categories'))) {
+    try {
+      const categories = await loadMercadoLivreCategoryCatalog();
+      return sendJson({ source: 'mercadolivre', siteId: 'MLB', categories, cache: getMercadoLivreCategoryCacheInfo() });
+    } catch (err: any) {
+      return sendJson({ error: err?.message || String(err), cache: getMercadoLivreCategoryCacheInfo() }, 502);
+    }
   }
 
   // GET /qr - Rota visual para escanear QR Code em HD ou ver Pairing Code no navegador
@@ -261,7 +272,15 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       const body = await parseJsonBody(req);
       const updates: Record<string, string> = {};
 
-      if (Array.isArray(body.categories)) updates.ML_CATEGORIES = body.categories.join(',');
+      if (Array.isArray(body.categories)) {
+        // O painel salva IDs oficiais; o scraper atual continua recebendo
+        // queries legíveis, convertidas através do catálogo carregado.
+        const queries = body.categories
+          .map((categoryId: unknown) => typeof categoryId === 'string' ? getMercadoLivreCategoryQuery(categoryId) || categoryId : '')
+          .map((query: string) => query.trim())
+          .filter(Boolean);
+        updates.ML_CATEGORIES = queries.join(',');
+      }
       if (Array.isArray(body.queries)) updates.ML_SEARCH_QUERIES = body.queries.join(',');
       if (typeof body.affiliateId === 'string' && body.affiliateId.trim()) updates.ML_AFFILIATE_ID = body.affiliateId.trim();
       if (typeof body.groupId === 'string') updates.WHATSAPP_GROUP_ID = body.groupId.trim();

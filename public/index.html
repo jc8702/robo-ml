@@ -279,10 +279,15 @@
     /* BUSCA E BARRA DE SELEÇÃO */
     .search-filter-box {
       margin-bottom: 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
     }
 
     .search-filter-box input {
-      width: 100%;
+      flex: 1;
+      min-width: 260px;
       background: rgba(15, 23, 42, 0.8);
       border: 1px solid var(--border-card);
       border-radius: 12px;
@@ -809,9 +814,11 @@
           </div>
         </div>
 
-        <!-- Filtro Rápido de Texto -->
+        <!-- Filtro Rápido de Texto com Botões de Seleção Inteligente -->
         <div class="search-filter-box">
-          <input type="text" id="inputTreeSearch" placeholder="🔍 Filtrar subcategorias na tela (ex: iphone 16, whey, notebook gamer, smartwatch...)...">
+          <input type="text" id="inputTreeSearch" placeholder="🔍 Digite para filtrar subcategorias (ex: furadeira, notebook, tênis, whey, capas)...">
+          <button class="btn btn-primary" id="btnSelectFiltered" style="white-space: nowrap; padding: 0.85rem 1.2rem; font-size: 0.88rem; font-weight: 700;">☑️ Selecionar Resultados da Busca</button>
+          <button class="btn btn-secondary" id="btnDeselectFiltered" style="white-space: nowrap; padding: 0.85rem 1rem; font-size: 0.88rem;">🔲 Desmarcar Filtrados</button>
         </div>
 
         <!-- Resumo das Subcategorias Selecionadas -->
@@ -1048,7 +1055,7 @@
 
   <script>
     // CATÁLOGO DE CATEGORIAS E SUBCATEGORIAS
-    const CASCADE_DATA = [
+    let CASCADE_DATA = [
       {
         id: 'ofertas-destaque-ml',
         name: 'Ofertas Destaque & Campanhas ML',
@@ -1325,7 +1332,7 @@
         if (filterLower && matchingSubs.length === 0) return;
 
         const subIds = cat.subs.map(s => s.id);
-        const selectedSubCount = subIds.filter(id => selectedCategories.includes(id)).length;
+        const selectedSubCount = cat.subs.filter(sub => selectedCategories.includes(sub.id) || selectedCategories.includes(sub.query)).length;
         const isParentSelected = selectedSubCount > 0 && selectedSubCount === subIds.length;
 
         const parentDiv = document.createElement('div');
@@ -1350,12 +1357,12 @@
         subList.className = 'subcategories-list';
 
         matchingSubs.forEach(sub => {
-          const isSubChecked = selectedCategories.includes(sub.id);
+          const isSubChecked = selectedCategories.includes(sub.id) || selectedCategories.includes(sub.query);
           const subLabel = document.createElement('label');
           subLabel.className = 'sub-item';
           subLabel.innerHTML = `
             <input type="checkbox" value="${sub.id}" ${isSubChecked ? 'checked' : ''} onchange="toggleSingleCategory('${sub.id}', this.checked)">
-            <span>${sub.name}</span>
+            <span title="${sub.path ? sub.path.join(' > ') : sub.name}">${sub.name}</span>
           `;
           subList.appendChild(subLabel);
         });
@@ -1381,7 +1388,7 @@
         CASCADE_DATA.forEach(parent => {
           if (parent.id === catId) displayName = `${parent.icon} ${parent.name}`;
           parent.subs.forEach(s => {
-            if (s.id === catId) displayName = `${parent.icon} ${s.name}`;
+            if (s.id === catId || s.query === catId) displayName = `${parent.icon} ${s.name}`;
           });
         });
 
@@ -1392,11 +1399,25 @@
       });
     }
 
+    const btnSelectFiltered = document.getElementById('btnSelectFiltered');
+    const btnDeselectFiltered = document.getElementById('btnDeselectFiltered');
+
     function toggleParentGroup(parentId, isChecked) {
       const parent = CASCADE_DATA.find(p => p.id === parentId);
       if (!parent) return;
 
-      const subIds = parent.subs.map(s => s.id);
+      const filterText = inputTreeSearch.value.trim();
+      const filterLower = filterText.toLowerCase();
+
+      // Se houver filtro ativo na busca, afeta apenas as subcategorias visíveis que correspondem ao termo
+      const targetSubs = parent.subs.filter(s => 
+        !filterLower || 
+        parent.name.toLowerCase().includes(filterLower) || 
+        s.name.toLowerCase().includes(filterLower) || 
+        s.id.toLowerCase().includes(filterLower)
+      );
+
+      const subIds = targetSubs.map(s => s.id);
       if (isChecked) {
         subIds.forEach(id => {
           if (!selectedCategories.includes(id)) selectedCategories.push(id);
@@ -1408,6 +1429,80 @@
       renderCascadeTree(inputTreeSearch.value);
       saveAllConfig();
     }
+
+    // Seleciona APENAS as subcategorias que correspondem ao filtro pesquisado
+    btnSelectFiltered.addEventListener('click', () => {
+      const filterText = inputTreeSearch.value.trim();
+      const filterLower = filterText.toLowerCase();
+
+      if (!filterLower) {
+        showToast('Digite um termo no campo de busca para selecionar subcategorias específicas.', 'warning');
+        return;
+      }
+
+      let countAdded = 0;
+      CASCADE_DATA.forEach(cat => {
+        cat.subs.forEach(s => {
+          const matches = cat.name.toLowerCase().includes(filterLower) || 
+                          s.name.toLowerCase().includes(filterLower) || 
+                          s.id.toLowerCase().includes(filterLower);
+          if (matches) {
+            if (!selectedCategories.includes(s.id)) {
+              selectedCategories.push(s.id);
+              countAdded++;
+            }
+          }
+        });
+      });
+
+      renderCascadeTree(filterText);
+      saveAllConfig();
+
+      if (countAdded > 0) {
+        log(`☑️ ${countAdded} subcategoria(s) correspondente(s) a "${filterText}" foram selecionada(s).`);
+        showToast(`${countAdded} subcategoria(s) selecionada(s) para "${filterText}"!`, 'success');
+      } else {
+        showToast(`Todas as subcategorias de "${filterText}" já estão selecionadas ou nenhuma foi encontrada.`, 'info');
+      }
+    });
+
+    // Desmarca APENAS as subcategorias que correspondem ao filtro pesquisado
+    btnDeselectFiltered.addEventListener('click', () => {
+      const filterText = inputTreeSearch.value.trim();
+      const filterLower = filterText.toLowerCase();
+
+      if (!filterLower) {
+        selectedCategories = [];
+        renderCascadeTree();
+        saveAllConfig();
+        log('🔲 Todas as subcategorias foram desmarcadas.');
+        showToast('Seleção limpa!', 'warning');
+        return;
+      }
+
+      let countRemoved = 0;
+      CASCADE_DATA.forEach(cat => {
+        cat.subs.forEach(s => {
+          const matches = cat.name.toLowerCase().includes(filterLower) || 
+                          s.name.toLowerCase().includes(filterLower) || 
+                          s.id.toLowerCase().includes(filterLower);
+          if (matches) {
+            if (selectedCategories.includes(s.id)) {
+              selectedCategories = selectedCategories.filter(id => id !== s.id);
+              countRemoved++;
+            }
+          }
+        });
+      });
+
+      renderCascadeTree(filterText);
+      saveAllConfig();
+
+      if (countRemoved > 0) {
+        log(`🔲 ${countRemoved} subcategoria(s) correspondente(s) a "${filterText}" foram desmarcada(s).`);
+        showToast(`${countRemoved} subcategoria(s) desmarcada(s) para "${filterText}"!`, 'warning');
+      }
+    });
 
     function toggleSingleCategory(catId, isChecked) {
       if (isChecked) {
@@ -1423,6 +1518,30 @@
       selectedCategories = selectedCategories.filter(id => id !== catId);
       renderCascadeTree(inputTreeSearch.value);
       saveAllConfig();
+    }
+
+    async function loadMercadoLivreCatalog() {
+      try {
+        log('📚 Carregando árvore oficial completa de categorias do Mercado Livre...');
+        const response = await fetch('/api/ml/categories');
+        const payload = await response.json();
+        if (!response.ok || !Array.isArray(payload.categories) || payload.categories.length === 0) {
+          throw new Error(payload.error || 'Catálogo vazio');
+        }
+        CASCADE_DATA = payload.categories;
+        // Converte valores antigos salvos como query para IDs oficiais da folha.
+        selectedCategories = selectedCategories.map((value) => {
+          for (const group of CASCADE_DATA) {
+            const leaf = group.subs.find(sub => sub.id === value || sub.query === value);
+            if (leaf) return leaf.id;
+          }
+          return value;
+        });
+        const totalLeaves = CASCADE_DATA.reduce((total, group) => total + group.subs.length, 0);
+        log(`✅ Catálogo MLB carregado: ${CASCADE_DATA.length} categorias principais e ${totalLeaves} subcategorias diretas.`);
+      } catch (err) {
+        log('⚠️ Não foi possível carregar o catálogo oficial; mantendo catálogo local: ' + err);
+      }
     }
 
     inputTreeSearch.addEventListener('input', (e) => {
@@ -1497,6 +1616,7 @@
       } catch (err) {
         log('ℹ️ Erro ao carregar configurações do servidor: ' + err);
       }
+      await loadMercadoLivreCatalog();
       renderCascadeTree();
     }
 

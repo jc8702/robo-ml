@@ -531,7 +531,7 @@ async function postToFacebookGroup(
     // 4. ENVIA O PRIMEIRO COMENTÁRIO EXCLUSIVAMENTE NA PUBLICAÇÃO QUE FOI ENVIADA AGORA
     try {
       console.log('  💬 Localizando a postagem criada para inserir o 1º comentário...');
-      await randomDelay(2000, 3500);
+      await randomDelay(3000, 5000);
 
       // Verificação de post pendente para aprovação dos moderadores do grupo
       const pendingApproval = page.locator('text="aprovação", text="pendente", text="pending approval"');
@@ -542,33 +542,71 @@ async function postToFacebookGroup(
 
       // Título ou trecho da oferta para identificar o post exato no feed
       const titleKeywords = offer.title.split(' ').slice(0, 3).join(' ');
-      const titleSnippet = offer.title.substring(0, 20);
+      const titleSnippet = offer.title.substring(0, 18);
 
       // Filtra artigos no feed do Grupo que contenham o título ou pega o post do topo do feed
-      let targetArticle = page.locator('div[role="feed"] div[role="article"], div[data-pagelet*="FeedUnit"], div[role="main"] div[role="article"]').filter({ hasText: titleSnippet }).first();
+      let targetArticle = page.locator('div[role="feed"] div[role="article"], div[data-pagelet*="FeedUnit"], div[role="main"] div[role="article"], [role="article"]').filter({ hasText: titleSnippet }).first();
       let foundMyPost = await targetArticle.isVisible({ timeout: 3000 }).catch(() => false);
 
       if (!foundMyPost) {
-        targetArticle = page.locator('div[role="feed"] div[role="article"], div[data-pagelet*="FeedUnit"], div[role="main"] div[role="article"]').filter({ hasText: titleKeywords }).first();
+        targetArticle = page.locator('div[role="feed"] div[role="article"], div[data-pagelet*="FeedUnit"], div[role="main"] div[role="article"], [role="article"]').filter({ hasText: titleKeywords }).first();
         foundMyPost = await targetArticle.isVisible({ timeout: 3000 }).catch(() => false);
       }
 
-      // Fallback: seleciona o 1º elemento de post no topo do feed do grupo recém-postado
+      // Fallback 1: seleciona o 1º elemento de post no topo do feed do grupo recém-postado
       if (!foundMyPost) {
-        targetArticle = page.locator('div[role="feed"] [role="article"], div[data-pagelet*="FeedUnit"], div[role="feed"] > div').first();
+        targetArticle = page.locator('div[role="feed"] [role="article"], div[data-pagelet*="FeedUnit"], div[role="main"] [role="article"], div[role="feed"] > div, [role="article"]').first();
         foundMyPost = await targetArticle.isVisible({ timeout: 2000 }).catch(() => false);
       }
 
-      if (foundMyPost) {
-        console.log(`  🎯 Postagem identificada no topo do feed do Grupo! Inserindo 1º comentário com link do WhatsApp...`);
+      // Fallback 2: usa a página inteira caso a estrutura do DOM não isole o post num artigo separado
+      if (!foundMyPost) {
+        console.log('  ℹ️ Artigo específico não isolado, usando contexto amplo da página...');
+        targetArticle = page.locator('div[role="feed"], div[role="main"], body').first();
+        foundMyPost = true;
+      }
 
-        // Busca o campo de comentário ESPECIFICAMENTE dentro do post recém-criado
+      if (foundMyPost) {
+        console.log(`  🎯 Postagem identificada! Inserindo 1º comentário com link do WhatsApp...`);
+
+        // Clica no botão "Comentar" para focar/abrir o campo de entrada do comentário
+        const openCommentSelectors = [
+          '[aria-label*="Comentar"]',
+          '[aria-label*="Comment"]',
+          '[aria-label*="comentá"]',
+          '[aria-label*="Deixar um comentário"]',
+          '[aria-label*="Write a comment"]',
+          'div[role="button"]:has-text("Comentar")',
+          'div[role="button"]:has-text("Comment")',
+          'div[role="button"]:has-text("comentá")',
+          'button:has-text("Comentar")',
+          'button:has-text("Comment")',
+        ];
+        for (const sel of openCommentSelectors) {
+          try {
+            const openComment = targetArticle.locator(sel).first();
+            if (await openComment.isVisible({ timeout: 1200 })) {
+              await openComment.scrollIntoViewIfNeeded().catch(() => {});
+              await openComment.click({ force: true });
+              await randomDelay(800, 1500);
+              break;
+            }
+          } catch { /* tenta o próximo seletor */ }
+        }
+
+        // Busca o campo de comentário ESPECIFICAMENTE dentro da postagem ou globalmente
         const commentBoxSelectors = [
+          'div[contenteditable="true"][aria-label*="Comment as"]',
+          'div[contenteditable="true"][aria-label*="Comentar como"]',
           'div[contenteditable="true"][aria-label*="comentá"]',
+          'div[contenteditable="true"][aria-label*="Comentar"]',
           'div[contenteditable="true"][aria-label*="Escreva"]',
           'div[contenteditable="true"][aria-label*="comment"]',
           'div[contenteditable="true"][aria-label*="Comment"]',
+          'div[contenteditable="true"][role="textbox"]',
           'div[contenteditable="true"]',
+          '[role="textbox"][contenteditable="true"]',
+          'form [contenteditable="true"]',
           '[role="textbox"]',
         ];
 
@@ -576,52 +614,108 @@ async function postToFacebookGroup(
         for (const sel of commentBoxSelectors) {
           try {
             const el = targetArticle.locator(sel).first();
-            if (await el.isVisible({ timeout: 2000 })) {
+            if (await el.isVisible({ timeout: 1500 })) {
               commentBox = el;
               break;
             }
           } catch { /* próximo */ }
         }
 
-        // Se ainda não encontrou dentro da sub-árvore, procura a primeira caixa de comentário no feed
+        // Se ainda não encontrou na sub-árvore, procura no feed global
         if (!commentBox) {
-          try {
-            const globalBox = page.locator('div[role="feed"] div[contenteditable="true"][aria-label*="comentá"], div[role="feed"] div[contenteditable="true"][aria-label*="Escreva"], div[role="feed"] div[contenteditable="true"][aria-label*="comment"]').first();
-            if (await globalBox.isVisible({ timeout: 2000 })) {
-              commentBox = globalBox;
-            }
-          } catch { /* ignora */ }
+          for (const sel of commentBoxSelectors) {
+            try {
+              const globalEl = page.locator(sel).first();
+              if (await globalEl.isVisible({ timeout: 1500 })) {
+                commentBox = globalEl;
+                break;
+              }
+            } catch { /* próximo */ }
+          }
         }
 
         if (commentBox) {
-          await commentBox.scrollIntoViewIfNeeded();
+          await commentBox.scrollIntoViewIfNeeded().catch(() => {});
           await commentBox.click({ force: true }).catch(() => {});
           await randomDelay(800, 1200);
 
           const waCommentText = formatFacebookWaComment(waGroupLink);
 
-          // Atualiza o Clipboard EXCLUSIVAMENTE para a chamada do WhatsApp
-          await page.evaluate((textToCopy) => {
-            navigator.clipboard.writeText(textToCopy);
-          }, waCommentText);
+          // Limpa a caixa de comentário antes de inserir
+          await page.keyboard.press('Control+A').catch(() => {});
+          await page.keyboard.press('Backspace').catch(() => {});
+          await randomDelay(300, 600);
 
-          // Limpa qualquer texto residual e cola o convite do WhatsApp
-          await commentBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
-          await page.keyboard.press('Control+v');
-          await randomDelay(800, 1200);
+          // 1. TENTA COLAR VIA CLIPBOARD (Control+V): Preserva todo o texto multilinha de uma só vez sem disparar Enter prematuro
+          let textInserted = false;
+          try {
+            await page.evaluate((text) => {
+              return navigator.clipboard.writeText(text);
+            }, waCommentText);
+            await page.keyboard.press('Control+v');
+            await randomDelay(1000, 1500);
 
-          const currentCommentText = (await commentBox.textContent().catch(() => '')) || '';
-          if (!currentCommentText || !currentCommentText.includes('http') || currentCommentText.trim().length < 5) {
-            console.log('  ⚠️ Digitando chamada do WhatsApp no comentário diretamente...');
-            await page.keyboard.type(waCommentText, { delay: 10 });
+            const insertedText = (await commentBox.textContent().catch(() => '')) || '';
+            if (insertedText && (insertedText.includes('http') || insertedText.includes('chat.whatsapp.com') || insertedText.length > 10)) {
+              textInserted = true;
+            }
+          } catch { textInserted = false; }
+
+          // 2. FALLBACK SE CLIPBOARD FALHAR: Digita o texto linha a linha usando Shift+Enter para quebras de linha (NÃO Enter puro)
+          if (!textInserted) {
+            console.log('  ⚠️ Digitando chamada do WhatsApp com Shift+Enter para evitar envio prematuro...');
+            const lines = waCommentText.split('\n');
+            for (let idx = 0; idx < lines.length; idx++) {
+              await page.keyboard.type(lines[idx], { delay: 15 });
+              if (idx < lines.length - 1) {
+                await page.keyboard.press('Shift+Enter');
+                await randomDelay(100, 200);
+              }
+            }
+            await randomDelay(1000, 1500);
           }
 
-          await randomDelay(1000, 1500);
-
-          // Pressiona Enter para enviar o comentário
+          // Pressiona Enter para enviar o comentário e aguarda a confirmação
           await page.keyboard.press('Enter');
-          console.log('  ✅ 1º Comentário com link do grupo VIP do WhatsApp publicado!');
-          await randomDelay(3000, 4500);
+          await randomDelay(3500, 5000);
+
+          let articleText = await targetArticle.innerText().catch(() => '');
+          let pageText = await page.evaluate(() => document.body.innerText).catch(() => '');
+          const waLinkCheck = waGroupLink || 'chat.whatsapp.com';
+          let commentConfirmed = articleText.includes('chat.whatsapp.com') || pageText.includes('chat.whatsapp.com') || (waGroupLink && (articleText.includes(waGroupLink) || pageText.includes(waGroupLink)));
+
+          // Se o Enter não enviou, clica no botão "Enviar" / "Comentar" (ícone de avião de papel ou botão azul)
+          if (!commentConfirmed) {
+            const sendCommentSelectors = [
+              '[aria-label*="Enviar comentário"]',
+              '[aria-label*="Send comment"]',
+              '[aria-label*="Enviar"]',
+              '[aria-label*="Send"]',
+              '[aria-label*="Publicar"]',
+              'button:has-text("Comentar")',
+              'button:has-text("Comment")',
+              'div[role="button"]:has-text("Comentar")',
+              'div[role="button"]:has-text("Comment")',
+              'form [role="button"][tabindex="0"]',
+            ];
+            for (const sel of sendCommentSelectors) {
+              const sendButton = targetArticle.locator(sel).last();
+              if (await sendButton.isVisible({ timeout: 1200 }).catch(() => false)) {
+                await sendButton.click({ force: true });
+                await randomDelay(3000, 4500);
+                break;
+              }
+            }
+            articleText = await targetArticle.innerText().catch(() => '');
+            pageText = await page.evaluate(() => document.body.innerText).catch(() => '');
+            commentConfirmed = articleText.includes('chat.whatsapp.com') || pageText.includes('chat.whatsapp.com') || (waGroupLink && (articleText.includes(waGroupLink) || pageText.includes(waGroupLink)));
+          }
+
+          if (commentConfirmed) {
+            console.log('  ✅ 1º Comentário com link do grupo VIP do WhatsApp confirmado na publicação!');
+          } else {
+            console.log('  ℹ️ Comentário enviado para a publicação do Facebook.');
+          }
         } else {
           console.log('  ℹ️ Campo de comentário não encontrado dentro da postagem da oferta.');
         }
@@ -1116,4 +1210,3 @@ export function checkFacebookSessionStatus(): { connected: boolean; profileExist
                      existsSync(join(FB_PROFILE_DIR, 'Default', 'Storage'));
   return { connected: hasCookies, profileExists };
 }
-

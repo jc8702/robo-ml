@@ -7,6 +7,12 @@ echo ========================================================
 echo.
 cd /d "%~dp0"
 echo [INFO] Liberando porta 3000 de execucoes anteriores...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
+echo [INFO] Compilando arquivos de codigo (npm run build)...
+call npm run build
+if errorlevel 1 (
+  echo [ERRO] O build falhou. O bot nao sera iniciado com dist desatualizado.
+  pause
+  exit /b 1
+)
 node dist/server.js --open || npx tsx src/server.ts --open
 pause

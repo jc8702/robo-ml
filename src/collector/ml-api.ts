@@ -66,7 +66,23 @@ async function openBrowser(): Promise<{ browser: Browser; context: BrowserContex
     context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, contextOptions);
   } catch {
     delete contextOptions.executablePath;
-    context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, contextOptions);
+    try {
+      context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, contextOptions);
+    } catch {
+      // Fallback em caso de lock no perfil persistente por outro processo
+      const browser = await chromium.launch({
+        headless: isCloud,
+        args: contextOptions.args,
+        executablePath: findBrowserPath(),
+      });
+      context = await browser.newContext({
+        viewport: contextOptions.viewport,
+        userAgent: contextOptions.userAgent,
+        locale: contextOptions.locale,
+        extraHTTPHeaders: contextOptions.extraHTTPHeaders,
+      });
+      return { browser, context };
+    }
   }
 
   await context.addInitScript(() => {
@@ -74,6 +90,28 @@ async function openBrowser(): Promise<{ browser: Browser; context: BrowserContex
   });
 
   return { browser: context as any, context };
+}
+
+/**
+ * Converte o termo de busca em uma URL limpa nativa do Mercado Livre
+ */
+function toMLSearchUrl(query: string): string {
+  const queryLower = query.toLowerCase().trim();
+  const dealCampaignTerms = [
+    'ofertas do dia', 'ofertas relampago', 'mais vendidos', 'menos de 50 reais',
+    'ofertas de mercado', 'liquidação queima de estoque', 'cupons e descontos',
+    'menor preco 30 dias', 'ofertas', 'promocoes', 'promoção', 'desconto',
+    'achadinhos', 'oferta', 'queima de estoque', 'liquidação', 'destaques'
+  ];
+  if (dealCampaignTerms.some((term) => queryLower.includes(term))) {
+    return 'https://www.mercadolivre.com.br/ofertas';
+  }
+  const normalized = queryLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const cleanSlug = normalized.replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+  if (cleanSlug.length > 0) {
+    return `https://lista.mercadolivre.com.br/${cleanSlug}`;
+  }
+  return `https://lista.mercadolivre.com.br/${encodeURIComponent(queryLower)}`;
 }
 
 /**
@@ -206,42 +244,43 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
   });
 }
 
+function isContextValid(context: BrowserContext | null): boolean {
+  if (!context) return false;
+  try {
+    context.pages();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Busca ofertas no Mercado Livre utilizando uma página existente.
+ * Busca ofertas no Mercado Livre utilizando uma página/contexto reutilizado.
  */
 export async function searchOffers(
   query: string,
   config: AppConfig,
-  existingContext?: BrowserContext
+  existingContext?: BrowserContext,
+  existingPage?: Page
 ): Promise<MLOffer[]> {
   let createdBrowser: Browser | null = null;
   let context: BrowserContext | null = existingContext || null;
-  let page: Page | null = null;
+  let page: Page | null = existingPage || null;
+  const isStandalone = !existingPage;
 
   try {
-    if (!context) {
+    if (!isContextValid(context)) {
       const res = await openBrowser();
       createdBrowser = res.browser;
       context = res.context;
     }
 
-    page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
+    if (!page || page.isClosed()) {
+      page = context!.pages().length > 0 ? context!.pages()[0] : await context!.newPage();
+    }
 
     const queryLower = query.toLowerCase().trim();
-    const dealCampaignTerms = [
-      'ofertas do dia', 'ofertas relampago', 'mais vendidos', 'menos de 50 reais',
-      'ofertas de mercado', 'liquidação queima de estoque', 'cupons e descontos',
-      'menor preco 30 dias', 'ofertas', 'promocoes', 'promoção', 'desconto',
-      'achadinhos', 'oferta', 'queima de estoque', 'liquidação', 'destaques'
-    ];
-    const isGenericQuery = dealCampaignTerms.some((term) => queryLower.includes(term));
-
-    let url = '';
-    if (isGenericQuery) {
-      url = 'https://www.mercadolivre.com.br/ofertas';
-    } else {
-      url = `https://www.mercadolivre.com.br/jm/search?as_word=${encodeURIComponent(queryLower)}`;
-    }
+    const url = toMLSearchUrl(query);
 
     console.log(`  📡 Acessando: ${url}`);
 
@@ -255,7 +294,10 @@ export async function searchOffers(
     await page.waitForSelector('.poly-card, .ui-search-result, article, li.ui-search-layout__item, .promotion-item', { timeout: 8000 }).catch(() => {});
     await page.evaluate(() => window.scrollBy(0, 1800)).catch(() => {});
     await page.waitForTimeout(1500);
-    console.log(`  🔎 URL Resolvida: "${page.url()}" | Título: "${await page.title()}"`);
+
+    const currentUrl = page.url();
+    const pageTitle = await page.title().catch(() => '');
+    console.log(`  🔎 URL Resolvida: "${currentUrl}" | Título: "${pageTitle}"`);
 
     let offers: MLOffer[] = [];
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -270,6 +312,7 @@ export async function searchOffers(
       }
     }
 
+    const isGenericQuery = url.includes('/ofertas');
     const queryKeywords = queryLower
       .replace(/[^a-z0-9\s]/g, '')
       .split(/\s+/)
@@ -278,7 +321,6 @@ export async function searchOffers(
     let relevantOffers = offers.filter((offer) => {
       if (isGenericQuery) return true;
       const titleLower = offer.title.toLowerCase();
-      // Se for ex "playstation 5", aceita se contiver "playstation", "ps5" ou "console"
       if (queryLower.includes('playstation')) {
         return titleLower.includes('playstation') || titleLower.includes('ps5') || titleLower.includes('ps4') || titleLower.includes('dualsense');
       }
@@ -291,10 +333,9 @@ export async function searchOffers(
       return queryKeywords.some((keyword) => titleLower.includes(keyword));
     });
 
-    // Fallback: se não encontrou nenhuma oferta relevante com os termos da busca (ou caiu em account-verification),
-    // acessa a busca padrão do Mercado Livre ou feed /ofertas
+    // Fallback: se caiu em account-verification ou 0 ofertas, acessa o feed /ofertas
     if (page.url().includes('account-verification') || relevantOffers.length === 0) {
-      console.log(`  ⚠️ 0 ofertas com filtro rígido para "${query}". Utilizando produtos da busca do ML...`);
+      console.log(`  ⚠️ 0 ofertas com filtro rígido para "${query}". Utilizando produtos do feed de ofertas...`);
       if (offers.length > 0) {
         relevantOffers = offers;
       } else {
@@ -310,20 +351,31 @@ export async function searchOffers(
 
     console.log(`  📦 ${offers.length} no ML ➔ ${relevantOffers.length} filtrados com precisão para "${query}"`);
 
-    await page.close().catch(() => {});
-    if (createdBrowser) await createdBrowser.close().catch(() => {});
+    // Apenas fecha a página/browser se foram criados pontualmente nesta função (modo standalone)
+    if (isStandalone && page && !page.isClosed()) {
+      await page.close().catch(() => {});
+    }
+    if (createdBrowser) {
+      await createdBrowser.close().catch(() => {});
+    }
+
     return relevantOffers;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error(`  ❌ Erro ao buscar "${query}": ${msg}`);
-    if (page) await page.close().catch(() => {});
-    if (createdBrowser) await createdBrowser.close().catch(() => {});
+    if (isStandalone && page && !page.isClosed()) {
+      await page.close().catch(() => {});
+    }
+    if (createdBrowser) {
+      await createdBrowser.close().catch(() => {});
+    }
     return [];
   }
 }
 
 /**
- * Coleta ofertas de múltiplas queries com reutilização de 1 único navegador, deduplicação e filtro de histórico.
+ * Coleta ofertas de múltiplas queries reutilizando 1 único contexto e página do navegador.
+ * Possui auto-recuperação resiliente caso a página ou contexto seja desconectado.
  */
 export async function collectOffers(
   queries: string[],
@@ -336,35 +388,67 @@ export async function collectOffers(
 
   let sharedBrowser: Browser | null = null;
   let sharedContext: BrowserContext | null = null;
+  let sharedPage: Page | null = null;
 
-  try {
+  async function ensurePage(): Promise<Page> {
+    if (isContextValid(sharedContext) && sharedPage && !sharedPage.isClosed()) {
+      return sharedPage;
+    }
+    if (sharedContext) {
+      await sharedContext.close().catch(() => {});
+      sharedContext = null;
+      sharedBrowser = null;
+      sharedPage = null;
+    }
+
     const res = await openBrowser();
     sharedBrowser = res.browser;
     sharedContext = res.context;
+    sharedPage = sharedContext.pages().length > 0 ? sharedContext.pages()[0] : await sharedContext.newPage();
+    return sharedPage;
+  }
 
-    for (const query of queries) {
+  try {
+    for (let i = 0; i < queries.length; i++) {
+      const query = queries[i];
       console.log(`\n🔍 Buscando: "${query}"...`);
-      const offers = await searchOffers(query, config, sharedContext);
 
-      for (const offer of offers) {
-        const titleKey = normalizeTitleKey(offer.title);
-        if (history.has(offer.permalink) || history.has(titleKey)) {
-          continue;
+      try {
+        const page = await ensurePage();
+        const offers = await searchOffers(query, config, sharedContext!, page);
+
+        for (const offer of offers) {
+          const titleKey = normalizeTitleKey(offer.title);
+          if (history.has(offer.permalink) || history.has(titleKey)) {
+            continue;
+          }
+
+          offer.isLowest30Days = isLowestPriceIn30Days(titleKey, offer.currentPrice, offer.isLowest30Days);
+          allOffers.push(offer);
         }
-
-        offer.isLowest30Days = isLowestPriceIn30Days(titleKey, offer.currentPrice, offer.isLowest30Days);
-        allOffers.push(offer);
+      } catch (queryErr) {
+        console.error(`  ❌ Erro ao buscar "${query}": ${queryErr instanceof Error ? queryErr.message : String(queryErr)}`);
+        sharedPage = null;
+        if (!isContextValid(sharedContext)) {
+          sharedContext = null;
+          sharedBrowser = null;
+        }
       }
 
-      if (queries.indexOf(query) < queries.length - 1) {
-        await new Promise((r) => setTimeout(r, 1500));
+      if (i < queries.length - 1) {
+        await new Promise((r) => setTimeout(r, 1200));
       }
     }
   } catch (err) {
     console.error('[ML] Erro no ciclo de coleta de ofertas:', err);
   } finally {
-    if (sharedBrowser) {
-      await sharedBrowser.close().catch(() => {});
+    const curPage = sharedPage as Page | null;
+    const curContext = sharedContext as BrowserContext | null;
+    if (curPage && !curPage.isClosed()) {
+      await curPage.close().catch(() => {});
+    }
+    if (curContext && isContextValid(curContext)) {
+      await curContext.close().catch(() => {});
     }
   }
 
@@ -388,3 +472,5 @@ export async function collectOffers(
   console.log(`\n📊 Resumo do Coletor ML: ${allOffers.length} brutas ➔ ${filtered.length} após filtros ➔ ${finalOffers.length} melhores ofertas finalizadas.`);
   return finalOffers;
 }
+
+

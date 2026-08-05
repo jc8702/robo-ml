@@ -16,7 +16,7 @@ function formatPrice(value: number): string {
  * Gera o texto do comentário contendo o link do grupo do WhatsApp para ser postado logo após a publicação.
  */
 export function formatFacebookWaComment(waGroupLink?: string): string {
-  const linkToPromote = waGroupLink || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N';
+  const linkToPromote = waGroupLink || process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N';
   return getRandomWaGroupCta(linkToPromote);
 }
 

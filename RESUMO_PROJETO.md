@@ -4,7 +4,52 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 04/08/2026 - 19:57
+- **Última Atualização:** 05/08/2026 - 08:39
+
+- **05/08/2026 - 08:39:** **✨ IMPLEMENTAÇÃO DO BOTÃO DE SELEÇÃO INTELIGENTE DE BUSCA DE CATEGORIAS (`public/index.html`):**
+  - **Botão `☑️ Selecionar Resultados da Busca` posicionada ao lado do campo de pesquisa**:
+    - Reestruturado o container da busca `.search-filter-box` com layout `flexbox`.
+    - Adicionados os botões de ação instantânea `☑️ Selecionar Resultados da Busca` (`btnSelectFiltered`) e `🔲 Desmarcar Filtrados` (`btnDeselectFiltered`) alinhados lado a lado com o campo de texto de filtragem (`#inputTreeSearch`).
+  - **Filtro de Seleção Estrita por Palavra-Chave**:
+    - Ao pesquisar um termo (ex: *"furadeira"*, *"notebook"*, *"whey"*, *"capas"*), o clique no botão seleciona **exclusivamente as subcategorias correspondentes ao termo buscado**, ignorando a seleção global das demais categorias.
+    - Exibidos avisos visuais de confirmação via `showToast` informando a quantidade exata de subcategorias adicionadas/removidas para aquele termo.
+  - **Escopo do Checkbox de Categoria Pai (`toggleParentGroup`)**:
+    - Atualizado a marcação de categorias principais para que, caso haja um filtro de texto ativo no input, o clique na caixinha selecione apenas as subcategorias filtradas visíveis na tela.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo.
+
+- **05/08/2026 - 08:32:** **🛠️ CORREÇÃO CRÍTICA DO CICLO DE VIDA DO NAVEGADOR E BUSCA DO MERCADO LIVRE (`src/collector/ml-api.ts`):**
+  - **Reutilização e Preservação de Página Única (`sharedPage` & `isStandalone`)**:
+    - Identificado que o método `searchOffers()` fechava a página (`page.close()`) no término da primeira busca, destruindo a aba padrão do `BrowserContext` persistente do Playwright. Isso fazia com que todas as buscas subsequentes falhassem com o erro `browserContext.newPage: Target page, context or browser has been closed`.
+    - Ajustadas as funções `searchOffers()` e `collectOffers()` para manter uma única aba/página aberta e reutilizá-la continuamente (`page.goto()`) em todo o lote de categorias.
+  - **Mecanismo de Auto-Recuperação Resiliente (`ensurePage`)**:
+    - Implementada a função `ensurePage()` com verificação de integridade via `isContextValid()` e `page.isClosed()`. Caso ocorra qualquer desconexão do navegador durante uma busca, o robô automaticamente reinicializa o `BrowserContext` e abre uma nova página sem interromper o ciclo.
+  - **URLs Nativas do Mercado Livre (`toMLSearchUrl`)**:
+    - Substituída a rota legada `/jm/search?as_word=...` que era interceptada e redirecionada pelo Mercado Livre para a página de verificação de conta (`account-verification`).
+    - Criado o gerador de slugs limpos `toMLSearchUrl()` (ex: `https://lista.mercadolivre.com.br/furadeiras-de-mao`), permitindo acesso direto aos resultados de busca sem acionar checagens anti-bot.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo.
+
+- **05/08/2026 - 08:22:** **💬 ATIVAÇÃO E CORREÇÃO COMPLETA DA AUTOMAÇÃO DE 1º COMENTÁRIO COM LINK DO WHATSAPP NO FACEBOOK (`src/facebook/fb-poster.ts` & `src/formatter/facebook.ts`):**
+  - **Identificação Multi-Nível de Publicações no Feed (`targetArticle`)**:
+    - Expandidos os seletores do DOM (`[role="article"]`, `div[data-pagelet*="FeedUnit"]`, `div[role="main"]`, etc.) e fallbacks de escopo para garantir que a postagem criada seja isolada e focalizada instantaneamente após a publicação.
+  - **Abertura e Foco de Comentários (`openCommentSelectors` & `commentBoxSelectors`)**:
+    - Incluídos novos seletores para botões e caixas de comentário em variadas nacionalidades e layouts do Facebook (`Comment as Assistant`, `Comentar como...`, `Deixar um comentário`, `Escreva um comentário público...`).
+  - **Injeção de Texto Multilinha via Clipboard (`Control+V`) e Fallback `Shift+Enter`**:
+    - Refatorada a colagem do comentário com a chamada do Grupo VIP e o link do WhatsApp (`formatFacebookWaComment`). A colagem via Clipboard insere o bloco completo atomicamente sem disparar `Enter` prematuro no meio do texto.
+    - Empregada técnica de digitação linha a linha com `Shift+Enter` caso o clipboard falhe, garantindo que o link do WhatsApp seja incluído no comentário antes do envio.
+  - **Confirmação e Clique de Submissão (`Enter` + Botão Enviar)**:
+    - Adicionado suporte a clique forçado em botões de envio ("Comentar" / "Send") caso o evento `Enter` não submeta o comentário imediatamente.
+  - **Fallback de Link Padrão no Formatador (`src/formatter/facebook.ts`)**:
+    - Garantido o consumo de `process.env.FB_WA_GROUP_LINK` caso a variável `waGroupLink` não seja informada explicitamente.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo.
+
+- **05/08/2026 - 02:07:** **🛠️ RESOLUÇÃO DE ERROS NO AGENDADOR, WHATSAPP WEB E COMPILAÇÃO AUTOMÁTICA:**
+  - **Trava de Concorrência no Agendador (`src/scheduler/cron.ts`)**:
+    - Implementada a flag de segurança `isCycleRunning` com bloco `try/finally`. Impede a execução de ciclos paralelos sobrepostos disparados por cron ou API, eliminando travamento de perfil Chrome `.wa-profile` e disparos duplicados.
+  - **Descarte Gracioso de Modais no WhatsApp Web (`src/whatsapp/wa-playwright.ts`)**:
+    - Criada a função `dismissWaMediaModal` que fecha o modal de mídia e trata a caixa de confirmação *"Deseja descartar a seleção?"* do WhatsApp Web. Impede que popups fiquem sobrepostos no DOM interceptando cliques e gerando erro de `Timeout 30000ms exceeded`.
+  - **Compilação Automática no Inicializador (`Iniciar-Bot.bat`)**:
+    - Adicionada a chamada `call npm run build` antes da inicialização do `node dist/server.js`, garantindo que o robô sempre execute os binários compilados mais recentes.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo.
 
 - **04/08/2026 - 19:57:** **🛡️ IMPLEMENTAÇÃO DE CAMUFLAGEM (STEALTH) E INTERAÇÃO HUMANA NO INSTAGRAM:**
   - **Injeção de Scripts Anti-Detecção (`src/instagram/ig-poster.ts`)**:

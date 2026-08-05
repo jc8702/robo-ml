@@ -121,6 +121,27 @@ export async function ensureWhatsAppLoggedIn(): Promise<Page> {
 }
 
 /**
+ * Descarta graciosamente modais de mídia e janelas de confirmação no WhatsApp Web ("Deseja descartar a seleção?").
+ */
+async function dismissWaMediaModal(page: Page): Promise<void> {
+  try {
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(500);
+
+    const discardBtn = page.locator('button:has-text("Descartar"), [aria-label*="Descartar"], [data-animate-modal-popup] button').first();
+    if (await discardBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await discardBtn.click({ force: true }).catch(() => page.keyboard.press('Escape'));
+      await page.waitForTimeout(500);
+    } else {
+      await page.keyboard.press('Escape').catch(() => {});
+      await page.waitForTimeout(500);
+    }
+
+    await page.waitForSelector('div[role="dialog"]', { state: 'detached', timeout: 5000 }).catch(() => {});
+  } catch { /* ignora */ }
+}
+
+/**
  * Envia uma oferta com foto via Playwright WhatsApp Web.
  */
 export async function sendOfferWithPhotoPlaywright(
@@ -278,8 +299,7 @@ export async function sendOfferWithPhotoPlaywright(
         // TRAVA DE SEGURANÇA: Se a legenda NÃO foi confirmada no modal, CANCELA O MODAL para JAMAIS enviar foto isolada/figurinha!
         if (!textConfirmed) {
           console.warn('[WA-PLAYWRIGHT] 🛡️ Legenda não confirmada no modal. Cancelando modal para evitar imagem sem texto...');
-          await page.keyboard.press('Escape').catch(() => {});
-          await page.waitForTimeout(1000);
+          await dismissWaMediaModal(page);
           if (existsSync(tempImgPath)) rmSync(tempImgPath);
           throw new Error('Legenda não pareada no modal - acionando fallback de post padrão com preview de link.');
         }
@@ -318,6 +338,7 @@ export async function sendOfferWithPhotoPlaywright(
         return true;
       } catch (err) {
         console.error('[WA-PLAYWRIGHT] Aviso no envio com mídia modal:', (err as Error)?.message || err);
+        await dismissWaMediaModal(page);
         if (existsSync(tempImgPath)) rmSync(tempImgPath);
       }
     }

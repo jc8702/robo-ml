@@ -13,6 +13,9 @@ import { dbGetSettings } from '../db/index.js';
 /** Referência do cron agendado para permitir cancelamento externo */
 let scheduledTask: ScheduledTask | null = null;
 
+/** Flag de controle para evitar execuções paralelas simultâneas */
+let isCycleRunning = false;
+
 /** Retorna a referência do cron ativo (para cancelamento via API) */
 export function getScheduledTask(): ScheduledTask | null {
   return scheduledTask;
@@ -28,21 +31,29 @@ export function stopScheduler(): void {
 }
 
 export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> {
-  // Recarrega config do Neon a cada ciclo para pegar alterações feitas pelo painel web
-  const config = await loadConfigAsync();
-
-  console.log(`\n[CRON] [${new Date().toLocaleTimeString('pt-BR')}] Iniciando ciclo automático de ofertas...`);
-
-  const groupJid = process.env.WHATSAPP_GROUP_ID;
-
-  const offers = await collectOffers(config.queries, config);
-
-  if (offers.length === 0) {
-    console.log('[CRON] Nenhuma oferta nova encontrada neste ciclo (ou todas já foram enviadas recentemente).');
+  if (isCycleRunning) {
+    console.log('[CRON] ⚠️ Já existe um ciclo automático em execução no momento. Ignorando disparo concorrente.');
     return;
   }
 
-  console.log(`\n[CRON] ${offers.length} ofertas coletadas e preparadas.`);
+  isCycleRunning = true;
+
+  try {
+    // Recarrega config do Neon a cada ciclo para pegar alterações feitas pelo painel web
+    const config = await loadConfigAsync();
+
+    console.log(`\n[CRON] [${new Date().toLocaleTimeString('pt-BR')}] Iniciando ciclo automático de ofertas...`);
+
+    const groupJid = process.env.WHATSAPP_GROUP_ID;
+
+    const offers = await collectOffers(config.queries, config);
+
+    if (offers.length === 0) {
+      console.log('[CRON] Nenhuma oferta nova encontrada neste ciclo (ou todas já foram enviadas recentemente).');
+      return;
+    }
+
+    console.log(`\n[CRON] ${offers.length} ofertas coletadas e preparadas.`);
 
   const affiliateOffers = await convertOffers(offers, config);
 
@@ -141,6 +152,11 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
   }
 
   console.log(`\n[CRON] Ciclo concluído! Próximo envio agendado.\n`);
+  } catch (cycleErr) {
+    console.error('❌ [CRON] Erro crítico no ciclo automático de ofertas:', cycleErr);
+  } finally {
+    isCycleRunning = false;
+  }
 }
 
 export async function startScheduler(config: AppConfig): Promise<void> {
