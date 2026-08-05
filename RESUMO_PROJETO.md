@@ -4,7 +4,12 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 05/08/2026 - 19:50
+- **Última Atualização:** 05/08/2026 - 20:00
+
+- **05/08/2026 - 20:00:** **📸 CORREÇÃO DO PERFIL DO INSTAGRAM NAS MENSAGENS (`src/formatter/whatsapp.ts`, `src/formatter/facebook.ts`):**
+  - **Ajuste do Handle do Instagram**: Atualizado o perfil do Instagram nas legendas geradas para o WhatsApp e Facebook de `@achadosdomeli.bnu` para `@achadosmeli.bnu` (`instagram.com/achadosmeli.bnu`).
+  - **Suporte a Variável Dinâmica**: As funções de formatação agora utilizam a variável de ambiente `INSTAGRAM_USERNAME` com fallback seguro para `achadosmeli.bnu`.
+  - **Validação de Build**: Executado `npm run build` com compilação 100% limpa sem erros.
 
 - **05/08/2026 - 19:50:** **⚡ CORREÇÃO E ATIVAÇÃO AUTOMÁTICA DA VARREDURA & POSTAGEM DO FACEBOOK (`src/scheduler/cron.ts`, `src/facebook/fb-poster.ts`):**
   - **Desbloqueio de Execução (`cron.ts`)**: Removida a verificação impeditiva `config.facebook.groupUrls.length > 0` que impedia o robô de chamar `postOffersToFacebookGroups` quando a lista de grupos no `.env` estava vazia. Agora o ciclo do Facebook sempre roda quando o Facebook está habilitado, acionando a varredura automática logo no início.

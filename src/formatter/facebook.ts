@@ -33,8 +33,9 @@ export function formatFacebookOffer(
   const rawGroupUrl = waGroupLink || process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N';
   // Remove https:// para impedir que o Facebook puxar imagem do WhatsApp no lugar da foto do produto
   const cleanGroupUrl = rawGroupUrl.replace(/^https?:\/\//, '');
-  const igHandle = '@achadosdomeli.bnu';
-  const igCleanUrl = 'instagram.com/achadosdomeli.bnu';
+  const igUsername = (process.env.INSTAGRAM_USERNAME || 'achadosmeli.bnu').replace(/^@/, '');
+  const igHandle = `@${igUsername}`;
+  const igCleanUrl = `instagram.com/${igUsername}`;
 
   lines.push('🔥 OFERTA IMPERDÍVEL 🔥');
   lines.push('');
@@ -96,8 +97,9 @@ export function formatFacebookOfferList(
   const lines: string[] = [];
   const rawGroupUrl = waGroupLink || process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N';
   const cleanGroupUrl = rawGroupUrl.replace(/^https?:\/\//, '');
-  const igHandle = '@achadosdomeli.bnu';
-  const igCleanUrl = 'instagram.com/achadosdomeli.bnu';
+  const igUsername = (process.env.INSTAGRAM_USERNAME || 'achadosmeli.bnu').replace(/^@/, '');
+  const igHandle = `@${igUsername}`;
+  const igCleanUrl = `instagram.com/${igUsername}`;
 
   lines.push('🛒 TOP OFERTAS DO DIA 🛒');
   lines.push(`📅 ${new Date().toLocaleDateString('pt-BR')}`);

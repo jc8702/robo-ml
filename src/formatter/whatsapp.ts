@@ -53,9 +53,13 @@ export function formatIndividualOffer(offer: AffiliateOffer): string {
     lines.push(offer.affiliateLink || offer.permalink);
   }
 
+  const igUsername = (process.env.INSTAGRAM_USERNAME || 'achadosmeli.bnu').replace(/^@/, '');
+  const igHandle = `@${igUsername}`;
+  const igCleanUrl = `instagram.com/${igUsername}`;
+
   lines.push('');
   lines.push('📲 *Siga nosso Instagram:*');
-  lines.push('👉 *@achadosdomeli.bnu* (instagram.com/achadosdomeli.bnu)');
+  lines.push(`👉 *${igHandle}* (${igCleanUrl})`);
   lines.push('');
   lines.push(getRandomFooterCta(true));
   lines.push('');
@@ -105,9 +109,13 @@ export function formatOfferList(offers: AffiliateOffer[]): string {
 
   lines.push('');
   lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+  const igUsernameList = (process.env.INSTAGRAM_USERNAME || 'achadosmeli.bnu').replace(/^@/, '');
+  const igHandleList = `@${igUsernameList}`;
+  const igCleanUrlList = `instagram.com/${igUsernameList}`;
+
   lines.push('');
   lines.push('📲 *Siga nosso Instagram:*');
-  lines.push('👉 *@achadosdomeli.bnu* (instagram.com/achadosdomeli.bnu)');
+  lines.push(`👉 *${igHandleList}* (${igCleanUrlList})`);
   lines.push('');
   lines.push(getRandomFooterCta(true));
 
