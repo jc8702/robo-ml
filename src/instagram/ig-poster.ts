@@ -127,6 +127,26 @@ export async function openInstagramBrowser(): Promise<BrowserContext> {
 
   activeIgContext = context;
 
+  // Injeta scripts anti-detecção (stealth) no contexto do navegador
+  await context.addInitScript(() => {
+    try {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      (window as any).chrome = {
+        runtime: {},
+        loadTimes: function () {},
+        csi: function () {},
+        app: {},
+      };
+      Object.defineProperty(navigator, 'languages', { get: () => ['pt-BR', 'pt', 'en-US', 'en'] });
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+      const originalQuery = window.navigator.permissions.query;
+      (window.navigator.permissions as any).query = (parameters: any) =>
+        parameters.name === 'notifications'
+          ? Promise.resolve({ state: Notification.permission })
+          : originalQuery(parameters);
+    } catch {}
+  });
+
   // Interceptor global: cancela automaticamente qualquer janela nativa Explorer do SO
   context.on('page', (p) => {
     p.on('filechooser', async (fc) => {
@@ -139,9 +159,63 @@ export async function openInstagramBrowser(): Promise<BrowserContext> {
   return context;
 }
 
-function randomDelay(minMs = 1500, maxMs = 3500): Promise<void> {
+export function randomDelay(minMs = 2500, maxMs = 5000): Promise<void> {
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function humanType(page: Page, locator: any, text: string): Promise<void> {
+  await locator.focus().catch(() => {});
+  await randomDelay(300, 700);
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    
+    // Simula erro de digitação ocasional (1.5% de chance) em texto longo
+    if (Math.random() < 0.015 && i > 3 && i < text.length - 3) {
+      const wrongChar = String.fromCharCode(char.charCodeAt(0) + 1);
+      await page.keyboard.type(wrongChar, { delay: Math.floor(Math.random() * 60) + 40 });
+      await randomDelay(150, 350);
+      await page.keyboard.press('Backspace', { delay: Math.floor(Math.random() * 40) + 30 });
+      await randomDelay(100, 250);
+    }
+
+    await page.keyboard.type(char, { delay: Math.floor(Math.random() * 70) + 45 });
+
+    // Pausa natural em pontuações e espaços
+    if ([' ', '.', ',', '!', '?', '\n'].includes(char)) {
+      await randomDelay(150, 400);
+    }
+  }
+  await randomDelay(400, 900);
+}
+
+export async function humanClick(page: Page, locator: any): Promise<void> {
+  const box = await locator.boundingBox().catch(() => null);
+  if (box) {
+    const targetX = box.x + box.width * (0.3 + Math.random() * 0.4);
+    const targetY = box.y + box.height * (0.3 + Math.random() * 0.4);
+    
+    // Movimento do mouse suave
+    await page.mouse.move(targetX, targetY, { steps: Math.floor(Math.random() * 8) + 5 });
+    await randomDelay(200, 500);
+    await page.mouse.click(targetX, targetY);
+  } else {
+    await locator.click({ force: true }).catch(() => {});
+  }
+  await randomDelay(800, 2000);
+}
+
+export async function humanScroll(page: Page): Promise<void> {
+  try {
+    const deltaY = Math.floor(Math.random() * 300) + 150;
+    await page.mouse.wheel(0, deltaY);
+    await randomDelay(1000, 2000);
+    if (Math.random() > 0.5) {
+      await page.mouse.wheel(0, -Math.floor(deltaY / 2));
+      await randomDelay(800, 1500);
+    }
+  } catch {}
 }
 
 async function downloadOfferImage(imageUrl: string): Promise<string | null> {
@@ -481,12 +555,11 @@ export async function postOfferToInstagram(
     for (const sel of captionSelectors) {
       const el = page.locator(sel).first();
       if (await el.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await el.click();
-        await randomDelay(500, 1000);
-        await page.keyboard.type(captionText, { delay: 5 });
+        await humanClick(page, el);
+        await humanType(page, el, captionText);
         captionFound = true;
-        console.log(`  ✅ Legenda digitada! (seletor: ${sel})`);
-        await randomDelay(1500, 2500);
+        console.log(`  ✅ Legenda digitada com ritmo humano! (seletor: ${sel})`);
+        await randomDelay(2000, 4000);
         break;
       }
     }

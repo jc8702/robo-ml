@@ -2,7 +2,7 @@ import { IgApiClient } from 'instagram-private-api';
 import { dbGetSettings, dbSaveMultipleSettings } from '../db/index.js';
 import { loadConfigAsync } from '../config/settings.js';
 import { getSentOffersHistoryFromDb } from '../collector/history.js';
-import { openInstagramBrowser } from './ig-poster.js';
+import { openInstagramBrowser, humanType } from './ig-poster.js';
 import { commentMatchesTrigger } from './ig-trigger.js';
 
 // Cache em memória de comentários já processados. O banco é usado para persistir entre reinícios.
@@ -42,6 +42,74 @@ function dmTextForPost(baseText: string, post: any): string {
 
 type CommentLike = { pk?: string | number; text?: string; user?: { username?: string; pk?: string | number } };
 type MonitorResult = { processedCount: number; repliesCount: number; errors: string[]; postsScanned: number; commentsScanned: number; triggerWord?: string };
+type OfficialComment = { id: string; text?: string; username?: string; timestamp?: string; from?: { id?: string; username?: string } };
+
+const OFFICIAL_REPLY_DELAY_MS = 1200;
+
+async function officialGraphRequest<T>(url: string, token: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init?.headers || {}) },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.error) {
+    const detail = payload?.error?.message || payload?.error?.error_user_msg || `HTTP ${response.status}`;
+    throw new Error(`Meta Graph API: ${detail}`);
+  }
+  return payload as T;
+}
+
+async function processOfficialComments(
+  accessToken: string,
+  userId: string,
+  graphVersion: string,
+  trigger: string,
+  ownerUsername: string,
+  dmText: string,
+  result: MonitorResult,
+): Promise<void> {
+  const base = `https://graph.instagram.com/${encodeURIComponent(graphVersion)}`;
+  const mediaFields = 'id,caption,comments.limit(100){id,text,username,timestamp,from}';
+  let mediaUrl: string | undefined = `${base}/${encodeURIComponent(userId)}/media?fields=${encodeURIComponent(mediaFields)}&limit=25`;
+
+  while (mediaUrl) {
+    const mediaPage: { data?: any[]; paging?: { next?: string } } = await officialGraphRequest<{ data?: any[]; paging?: { next?: string } }>(mediaUrl, accessToken);
+    for (const media of mediaPage.data || []) {
+      result.postsScanned++;
+      let commentsPage = media.comments;
+      while (commentsPage) {
+        const comments = (commentsPage.data || []) as OfficialComment[];
+        result.commentsScanned += comments.length;
+        for (const comment of comments) {
+          result.processedCount++;
+          const username = comment.username || comment.from?.username || '';
+          const commentId = String(comment.id || '');
+          const timestamp = comment.timestamp ? Date.parse(comment.timestamp) : NaN;
+          const isRecent = !Number.isFinite(timestamp) || Date.now() - timestamp <= 7 * 24 * 60 * 60 * 1000;
+          const matches = commentMatchesTrigger(comment.text || '', trigger) || commentMatchesTrigger(comment.text || '', 'PASSE');
+          if (!commentId || !username || username.toLowerCase() === ownerUsername.toLowerCase() || !matches || !isRecent || processedCommentIds.has(commentId)) continue;
+
+          try {
+            const sent = await officialGraphRequest<{ message_id?: string }>(
+              `${base}/${encodeURIComponent(userId)}/messages`,
+              accessToken,
+              { method: 'POST', body: JSON.stringify({ recipient: { comment_id: commentId }, message: { text: dmTextForPost(dmText, media) } }) },
+            );
+            if (!sent.message_id) throw new Error('Meta não retornou message_id; envio não confirmado');
+            processedCommentIds.add(commentId);
+            result.repliesCount++;
+            console.log(`  📩 Private reply confirmado para @${username} (comentário ${commentId})`);
+          } catch (err: any) {
+            result.errors.push(`Private reply para @${username}: ${err?.message || String(err)}`);
+          }
+          await new Promise((resolve) => setTimeout(resolve, OFFICIAL_REPLY_DELAY_MS));
+        }
+        commentsPage = commentsPage.paging?.next ? await officialGraphRequest<any>(commentsPage.paging.next, accessToken) : undefined;
+      }
+    }
+    mediaUrl = mediaPage.paging?.next;
+  }
+}
 
 function isOtherUserComment(comment: CommentLike, ownerUsername: string): boolean {
   return Boolean(comment.user?.username) && comment.user!.username!.toLowerCase() !== ownerUsername.toLowerCase();
@@ -53,7 +121,7 @@ async function processComments(
   mediaId: string,
   trigger: string,
   ownerUsername: string,
-  sendDm: (userPk: string, username: string, text: string) => Promise<void>,
+  sendDm: (commentId: string, userPk: string, username: string, text: string) => Promise<void>,
   replyPublicly: (text: string, commentId: string) => Promise<void>,
   dmText: string,
   result: MonitorResult,
@@ -74,7 +142,7 @@ async function processComments(
     }
 
     try {
-      await sendDm(commenterPk, commenterUsername, dmText);
+      await sendDm(commentId, commenterPk, commenterUsername, dmText);
       result.repliesCount++;
       console.log(`  📩 Direct enviado com sucesso para @${commenterUsername}!`);
       try {
@@ -84,6 +152,11 @@ async function processComments(
       }
       // Só grava como processado depois que o Direct foi confirmado.
       processedCommentIds.add(commentId);
+
+      // Delay humano entre envios para evitar bloqueio anti-spam (15s a 35s)
+      const delayMs = Math.floor(Math.random() * 20000) + 15000;
+      console.log(`  ⏱️ Pausa de segurança humana (${Math.round(delayMs / 1000)}s) antes da próxima resposta...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     } catch (err: any) {
       const msg = err?.message || String(err);
       result.errors.push(`Direct para @${commenterUsername}: ${msg}`);
@@ -116,7 +189,7 @@ async function processApiComments(
       mediaId,
       trigger,
       username,
-      async (userPk, _username, text) => { await ig.entity.directThread([userPk]).broadcastText(text); },
+      async (_commentId, userPk, _username, text) => { await ig.entity.directThread([userPk]).broadcastText(text); },
       async (text, commentId) => { await ig.media.comment({ mediaId, text, replyToCommentId: commentId }); },
       dmTextForPost(dmText, post),
       result,
@@ -185,7 +258,7 @@ async function processBrowserComments(
       post.mediaId,
       trigger,
       username,
-      async (userPk, commenterUsername, text) => {
+      async (_commentId, userPk, commenterUsername, text) => {
         try {
           await page.evaluate(async ({ userPk, text }) => {
           const csrf = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)?.[1] || '';
@@ -210,9 +283,9 @@ async function processBrowserComments(
           await messageButton.click({ force: true });
           const composer = page.locator('textarea[placeholder*="Mensagem"], textarea[placeholder*="Message"], div[contenteditable="true"]').last();
           await composer.waitFor({ state: 'visible', timeout: 10000 });
-          await composer.fill(text).catch(async () => { await composer.click(); await page.keyboard.insertText(text); });
+          await humanType(page, composer, text);
           await composer.press('Enter');
-          await page.waitForTimeout(1200);
+          await page.waitForTimeout(2000);
           const bodyText = await page.locator('body').innerText().catch(() => '');
           if (!bodyText.includes(text.slice(0, Math.min(30, text.length)))) throw new Error(`Mensagem não apareceu na conversa com @${commenterUsername}`);
         }
@@ -249,6 +322,30 @@ export async function checkAndReplyInstagramComments(options?: {
   const latestOffer = history[0];
   const dmText = formatDmMessage(template, latestOffer?.title || 'Produto em Promoção no Mercado Livre', latestOffer?.permalink || latestOffer?.link || 'https://www.mercadolivre.com.br');
   const result: MonitorResult = { processedCount: 0, repliesCount: 0, errors: [], postsScanned: 0, commentsScanned: 0, triggerWord: trigger };
+
+  // Quando configurada, a API oficial é a fonte única do envio: ela exige o
+  // comment_id e confirma a entrega com message_id. Isso evita o erro comum de
+  // tentar abrir uma conversa pelo userPk do comentário.
+  const officialAccessToken = config.instagram.accessToken || dbSettings.INSTAGRAM_ACCESS_TOKEN || process.env.INSTAGRAM_ACCESS_TOKEN || '';
+  const officialUserId = config.instagram.userId || dbSettings.INSTAGRAM_USER_ID || process.env.INSTAGRAM_USER_ID || '';
+  const officialGraphVersion = config.instagram.graphVersion || dbSettings.INSTAGRAM_GRAPH_VERSION || process.env.INSTAGRAM_GRAPH_VERSION || 'v23.0';
+  if (officialAccessToken || officialUserId) {
+    if (!officialAccessToken || !officialUserId) {
+      result.errors.push('API oficial incompleta: informe INSTAGRAM_ACCESS_TOKEN e INSTAGRAM_USER_ID.');
+      return result;
+    }
+    try {
+      console.log('[IG AUTO-DM] Meta Graph API: lendo comentários e enviando private replies por comment_id...');
+      await processOfficialComments(officialAccessToken, officialUserId, officialGraphVersion, trigger, username, dmText, result);
+      await saveProcessedCommentsToDb();
+      console.log(`[IG AUTO-DM] 🏁 Concluído via API oficial: ${result.repliesCount} envio(s) confirmado(s).`);
+      return result;
+    } catch (err: any) {
+      result.errors.push(`API oficial: ${err?.message || String(err)}`);
+      await saveProcessedCommentsToDb();
+      return result;
+    }
+  }
 
   if (password) {
     try {

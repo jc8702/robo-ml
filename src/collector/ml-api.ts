@@ -247,7 +247,13 @@ export async function searchOffers(
     }
 
     const queryLower = query.toLowerCase().trim();
-    const isGenericQuery = ['ofertas do dia', 'mais vendidos', 'promoção', 'desconto', 'oferta'].includes(queryLower);
+    const dealCampaignTerms = [
+      'ofertas do dia', 'ofertas relampago', 'mais vendidos', 'menos de 50 reais',
+      'ofertas de mercado', 'liquidação queima de estoque', 'cupons e descontos',
+      'menor preco 30 dias', 'ofertas', 'promocoes', 'promoção', 'desconto',
+      'achadinhos', 'oferta', 'queima de estoque', 'liquidação', 'destaques'
+    ];
+    const isGenericQuery = dealCampaignTerms.some((term) => queryLower.includes(term));
 
     const queryKeywords = queryLower
       .replace(/[^a-z0-9\s]/g, '')

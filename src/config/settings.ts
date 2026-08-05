@@ -2,31 +2,33 @@ import 'dotenv/config';
 import { dbGetSettings } from '../db/index.js';
 
 export const DEFAULT_CATEGORIES = [
-  // Celulares & Telefones
+  // Ofertas Destaque & Campanhas ML
+  'ofertas do dia', 'ofertas relampago', 'mais vendidos', 'menos de 50 reais', 'ofertas de mercado', 'liquidação queima de estoque', 'cupons e descontos', 'menor preco 30 dias',
+  // Moda, Calçados & Acessórios
+  'tenis casual', 'calcados', 'malas e bolsas', 'roupas intimas', 'roupas masculinas', 'vestido feminino', 'oculos relogios', 'acessorios de moda', 'mochila notebook',
+  // Celulares & Telefonia
   'iphone', 'samsung galaxy', 'xiaomi', 'motorola', 'realme', 'smartwatch', 'airpods', 'carregador celular', 'capinha celular',
   // Informática & Computação
   'notebook gamer', 'pc gamer', 'monitor gamer', 'placa de video', 'processador intel ryzen', 'ssd nvme', 'teclado mecanico', 'impressora', 'roteador wifi',
   // Games & Consoles
   'playstation 5', 'xbox series', 'nintendo switch', 'steam deck', 'cadeira gamer', 'volante logitech',
-  // Eletrônicos & Áudio
+  // Eletrônicos, Áudio & Vídeo
   'smart tv', 'caixa de som jbl', 'fone bluetooth', 'soundbar', 'drone dji', 'camera de seguranca', 'fire tv stick',
-  // Eletrodomésticos
+  // Eletrodomésticos & Linha Branca
   'air fryer', 'cafeteira', 'aspirador robo', 'geladeira', 'lava e seca', 'cooktop', 'ar condicionado', 'liquidificador',
-  // Casa & Móveis
-  'sofa retratil', 'colchao queen king', 'guarda roupa', 'mesa de jantar', 'lampada smart', 'jogo de cama',
-  // Ferramentas
+  // Casa, Móveis & Decoração
+  'sofa retratil', 'colchao queen king', 'guarda roupa', 'mesa de jantar', 'lampada smart', 'jogo de cama', 'decoracao utilidades',
+  // Ferramentas & Construção
   'parafusadeira', 'jogo de ferramentas', 'serra tico tico', 'inversora de solda', 'chuveiro lorenzetti',
   // Beleza & Cuidado Pessoal
   'barbeador eletrico', 'secador de cabelo', 'perfume importado', 'skincare', 'maquiagem',
-  // Saúde & Suplementos
+  // Saúde, Suplementos & Nutrição
   'whey protein', 'creatina', 'pre treino', 'vitamina c d3',
   // Esportes & Fitness
   'bicicleta aro 29', 'kit halteres', 'tenis corrida', 'barraca camping', 'bola futebol',
-  // Moda & Calçados
-  'tenis casual', 'camiseta masculina', 'vestido feminino', 'mochila notebook', 'relogio casio',
-  // Bebês & Infantil
+  // Bebês, Brinquedos & Infantil
   'carrinho de bebe', 'brinquedo fisher price', 'lego', 'mamadeira avent',
-  // Automotivo
+  // Automotivo & Acessórios
   'pneu aro', 'multimidia android', 'oleo motor 5w30', 'estetica automotiva',
   // Pet Shop
   'racao caes', 'racao gatos', 'caminha pet'
@@ -51,6 +53,9 @@ export interface InstagramConfig {
   autoDmEnabled: boolean;
   triggerWord: string;
   dmTemplate: string;
+  accessToken: string;
+  userId: string;
+  graphVersion: string;
 }
 
 export interface AppConfig {
@@ -134,6 +139,9 @@ export function loadConfig(): AppConfig {
       autoDmEnabled: process.env.INSTAGRAM_AUTO_DM !== 'false',
       triggerWord: process.env.INSTAGRAM_TRIGGER_WORD || 'PASSE',
       dmTemplate: process.env.INSTAGRAM_DM_TEMPLATE || 'Olá! Aqui está o seu link com desconto exclusivo para {title}: {link}',
+      accessToken: process.env.INSTAGRAM_ACCESS_TOKEN || '',
+      userId: process.env.INSTAGRAM_USER_ID || '',
+      graphVersion: process.env.INSTAGRAM_GRAPH_VERSION || 'v23.0',
     },
   };
 }
@@ -196,6 +204,9 @@ export async function loadConfigAsync(): Promise<AppConfig> {
       autoDmEnabled: dbSettings.INSTAGRAM_AUTO_DM ? dbSettings.INSTAGRAM_AUTO_DM === 'true' : process.env.INSTAGRAM_AUTO_DM !== 'false',
       triggerWord: dbSettings.INSTAGRAM_TRIGGER_WORD || process.env.INSTAGRAM_TRIGGER_WORD || 'PASSE',
       dmTemplate: dbSettings.INSTAGRAM_DM_TEMPLATE || process.env.INSTAGRAM_DM_TEMPLATE || 'Olá! Aqui está o seu link com desconto exclusivo para {title}: {link}',
+      accessToken: dbSettings.INSTAGRAM_ACCESS_TOKEN || process.env.INSTAGRAM_ACCESS_TOKEN || '',
+      userId: dbSettings.INSTAGRAM_USER_ID || process.env.INSTAGRAM_USER_ID || '',
+      graphVersion: dbSettings.INSTAGRAM_GRAPH_VERSION || process.env.INSTAGRAM_GRAPH_VERSION || 'v23.0',
     },
   };
 }

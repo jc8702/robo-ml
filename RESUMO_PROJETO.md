@@ -4,7 +4,19 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 04/08/2026 - 18:26
+- **Última Atualização:** 04/08/2026 - 19:57
+
+- **04/08/2026 - 19:57:** **🛡️ IMPLEMENTAÇÃO DE CAMUFLAGEM (STEALTH) E INTERAÇÃO HUMANA NO INSTAGRAM:**
+  - **Injeção de Scripts Anti-Detecção (`src/instagram/ig-poster.ts`)**:
+    - Adicionado `context.addInitScript` que mascara a flag `navigator.webdriver = undefined`, camufla a presença do Chrome (`window.chrome`), emula plugins padrão e ajusta permissões de notificações.
+  - **Digitação em Ritmo Humano (`humanType`)**:
+    - Desenvolvida a função `humanType` com variação de delay por caractere (45ms a 115ms), micropaussas em pontuações/espaços e simulação de erros ocasionais de digitação corrigidos com Backspace.
+    - Aplicada na digitação de legendas nos posts (`ig-poster.ts`) e no envio de mensagens no Direct (`ig-auto-reply.ts`).
+  - **Cliques e Movimentação de Mouse Realista (`humanClick` & `humanScroll`)**:
+    - Implementados movimentos suaves de mouse com aceleração e pontos intermediários antes do clique, além de rolagem suave (*smooth scroll*).
+  - **Espaçamento de Segurança Anti-Spam (`src/instagram/ig-auto-reply.ts`)**:
+    - Adicionado intervalo aleatório de segurança de 15 a 35 segundos entre envios sucessivos de Directs e comentários para prevenir alertas de *rate limit* e restrições de automação no Instagram.
+  - **Compilação e Validação**: Executado `npx tsc` com compilação 100% limpa sem erros.
 
 - **04/08/2026 - 18:26:** **🚀 DEPLOY COMPLETO DO PROJETO NO GITHUB, NEON DB, RENDER E VERCEL:**
   - **Higienização do Repositório (`.gitignore`)**: Adicionadas regras para excluir imagens temporárias (`*.png`), sessões de navegador (`.wa-auth`, `.ig-profile`, `.fb-profile`, `.chrome-profile`), `.env` e pastas temporárias `scratch/` e `.kombai/`.
@@ -201,8 +213,10 @@
   - ✅ Histórico de envios e preços (`history.ts`) agora sincroniza com tabelas `sent_history` e `price_history` do Neon PostgreSQL (persiste entre deploys/containers).
   - Arquivos modificados: `src/db/index.ts`, `render.yaml`, `.gitignore`, `src/facebook/fb-poster.ts`, `src/collector/ml-api.ts`, `src/scheduler/cron.ts`, `src/server.ts`, `src/collector/history.ts`
   - Arquivo criado: `src/config/browser.ts`
-
-
+- **[05/08/2026 - 00:31]:** Reestruturação e espelhamento fiel de todas as **14 Categorias Principais** e suas respectivas **Subcategorias / Subnichos** no painel de controle (`public/index.html`, `index.html`) e nas configurações padrão (`src/config/settings.ts`).
+  - Arquivos modificados: `public/index.html`, `index.html`, `src/config/settings.ts`
+- **[05/08/2026 - 00:34]:** Implementação da categoria dedicada **Ofertas Destaque & Campanhas ML** (`ofertas-destaque-ml`) e otimização do coletor Playwright (`src/collector/ml-api.ts`) para extração direta de ofertas das liquidações oficiais do Mercado Livre.
+  - Arquivos modificados: `public/index.html`, `index.html`, `src/collector/ml-api.ts`, `src/config/settings.ts`
 
 ## Decisões Técnicas
 - **Coleta**: Playwright com perfil Chrome persistente em `.chrome-profile/`.

@@ -1047,8 +1047,39 @@
     // CATÁLOGO DE CATEGORIAS E SUBCATEGORIAS
     const CASCADE_DATA = [
       {
+        id: 'ofertas-destaque-ml',
+        name: 'Ofertas Destaque & Campanhas ML',
+        icon: '🔥',
+        subs: [
+          { id: 'ofertas do dia', name: 'Ofertas do Dia (Seleção de 24h Oficial ML)' },
+          { id: 'ofertas relampago', name: 'Ofertas Relâmpago (Descontos por Tempo Limitado)' },
+          { id: 'mais vendidos', name: 'Mais Vendidos do Dia (Altíssima Procura)' },
+          { id: 'menos de 50 reais', name: 'Achadinhos de R$ 30 a R$ 50 (Baixo Custo)' },
+          { id: 'ofertas de mercado', name: 'Supermercado & Consumo Diário' },
+          { id: 'liquidação queima de estoque', name: 'Queima de Estoque & Liquidação' },
+          { id: 'cupons e descontos', name: 'Produtos com Cupons de Desconto' },
+          { id: 'menor preco 30 dias', name: 'Menor Preço dos Últimos 30 Dias' },
+        ]
+      },
+      {
+        id: 'moda-e-acessorios',
+        name: 'Moda, Calçados & Acessórios',
+        icon: '👗',
+        subs: [
+          { id: 'calcados', name: 'Calçados (Tênis, Sapatos, Sandálias & Botas)' },
+          { id: 'malas e bolsas', name: 'Malas, Bolsas & Mochilas Executivas' },
+          { id: 'roupas intimas', name: 'Roupas Íntimas, Lingerie & Pijamas' },
+          { id: 'roupas masculinas', name: 'Roupas Masculinas, Camisetas & Jaquetas' },
+          { id: 'vestido feminino', name: 'Moda Feminina, Vestidos & Conjuntos' },
+          { id: 'oculos relogios', name: 'Óculos de Sol, Relógios & Joias' },
+          { id: 'acessorios de moda', name: 'Acessórios de Moda (Cintos, Bonés, Carteiras)' },
+          { id: 'tenis casual', name: 'Tênis Streetwear & Esportivos Casual' },
+          { id: 'mochila notebook', name: 'Mochilas Impermeáveis & Escolares' },
+        ]
+      },
+      {
         id: 'celulares',
-        name: 'Celulares & Telefones',
+        name: 'Celulares & Telefonia',
         icon: '📱',
         subs: [
           { id: 'iphone', name: 'Apple / iPhone (iPhone 16, 15, 14, 13)' },
@@ -1087,13 +1118,13 @@
           { id: 'xbox series', name: 'Xbox Series X/S & Jogos' },
           { id: 'nintendo switch', name: 'Nintendo Switch & Jogos' },
           { id: 'steam deck', name: 'Consoles Portáteis PC (Steam Deck, ROG Ally)' },
-          { id: 'cadeira gamer', name: 'Cadeiras Gamer & Mesas Ergonomicas' },
+          { id: 'cadeira gamer', name: 'Cadeiras Gamer & Mesas Ergonômicas' },
           { id: 'volante logitech', name: 'Volantes, Joysticks & Cockpits' },
         ]
       },
       {
         id: 'eletronicos-audio-video',
-        name: 'Eletrônicos, Áudio e Som',
+        name: 'Eletrônicos, Áudio & Vídeo',
         icon: '🎧',
         subs: [
           { id: 'smart tv', name: 'Smart TVs 4K, OLED & QLED (50"/55"/65")' },
@@ -1131,6 +1162,7 @@
           { id: 'mesa de jantar', name: 'Mesas de Jantar & Cadeiras' },
           { id: 'lampada smart', name: 'Iluminação & Lâmpadas Inteligentes' },
           { id: 'jogo de cama', name: 'Decoração, Jogo de Cama & Cortinas' },
+          { id: 'decoracao utilidades', name: 'Utilidades Domésticas & Panelas' },
         ]
       },
       {
@@ -1154,7 +1186,7 @@
           { id: 'secador de cabelo', name: 'Secadores, Escovas & Chapinhas' },
           { id: 'perfume importado', name: 'Perfumes Importados (Carolina Herrera, Sauvage)' },
           { id: 'skincare', name: 'Skincare, Sérum & Protetor Solar' },
-          { id: 'maquiagem', name: 'Maquiagem & Kites de Cosméticos' },
+          { id: 'maquiagem', name: 'Maquiagem & Kits de Cosméticos' },
         ]
       },
       {
@@ -1178,18 +1210,6 @@
           { id: 'tenis corrida', name: 'Tênis de Corrida (Nike, Adidas, Asics)' },
           { id: 'barraca camping', name: 'Camping, Colchões & Outdoor' },
           { id: 'bola futebol', name: 'Futebol, Camisas de Time & Luvas' },
-        ]
-      },
-      {
-        id: 'moda',
-        name: 'Moda, Calçados & Acessórios',
-        icon: '👕',
-        subs: [
-          { id: 'tenis casual', name: 'Tênis Streetwear (Air Force, All Star)' },
-          { id: 'camiseta masculina', name: 'Roupas Masculinas & Jaquetas' },
-          { id: 'vestido feminino', name: 'Moda Feminina & Conjuntos' },
-          { id: 'mochila notebook', name: 'Mochilas Executivas & Impermeáveis' },
-          { id: 'relogio casio', name: 'Óculos de Sol & Relógios' },
         ]
       },
       {
