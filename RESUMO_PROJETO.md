@@ -4,7 +4,13 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 05/08/2026 - 19:10
+- **Última Atualização:** 05/08/2026 - 19:35
+
+- **05/08/2026 - 19:35:** **🚀 DEPLOY COMPLETO (GITHUB & VERCEL PRODUCTION):**
+  - **Compilação**: `npm run build` executado com sucesso de compilação 100% limpo sem erros.
+  - **Sincronização GitHub**: Todas as alterações foram comitadas e enviadas para o repositório remoto [`https://github.com/jc8702/robo-ml.git`](https://github.com/jc8702/robo-ml.git) na branch `main` (commit `2204298`).
+  - **Deploy Vercel Production**: Deploy de produção realizado com sucesso via Vercel CLI na URL oficial de produção [`https://ml-ofertas-bot-five.vercel.app`](https://ml-ofertas-bot-five.vercel.app).
+  - **Status**: 100% implantado e operacional.
 
 - **05/08/2026 - 19:10:** **📘 VARREDURA & AUTOSSINCRONIZAÇÃO DE GRUPOS DO FACEBOOK & RESTAURAÇÃO DO WHATSAPP A GRUPO ÚNICO (`src/facebook/fb-poster.ts`, `src/server.ts`, `public/index.html`, `src/scheduler/cron.ts`):**
   - **Restauração do WhatsApp a Grupo Único**: Removido o varredor de múltiplos grupos do WhatsApp e restaurada a configuração do WhatsApp para utilizar exclusivamente o grupo principal já configurado no `.env` (`WHATSAPP_GROUP_ID` / `WHATSAPP_GROUP_NAME`).
