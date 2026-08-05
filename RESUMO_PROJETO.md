@@ -223,6 +223,8 @@
   - Arquivos modificados: `src/collector/ml-api.ts`, `src/collector/history.ts`, `src/server.ts`, `public/index.html`, `index.html`
 - **[05/08/2026 - 01:34]:** Eliminação completa da geração de figurinhas (`.webp`). Sanitização de URLs de foto para `.jpg` em alta resolução (`-O.jpg`), definição explícita de `mimetype: image/jpeg` e inclusão de trava de segurança no Playwright que cancela modais sem legenda e garante postagem no formato padrão desenhado com preview de imagem do link.
   - Arquivos modificados: `src/whatsapp/client.ts`, `src/whatsapp/wa-playwright.ts`, `src/collector/ml-api.ts`
+- **[05/08/2026 - 01:55]:** Eliminação do bloqueio da tela amarela de login/verificação de conta (`account-verification`). Atualizado o endpoint de buscas para `https://www.mercadolivre.com.br/jm/search?as_word=<query>` no domínio principal e ativado contexto persistente em `.chrome-profile/`.
+  - Arquivos modificados: `src/collector/ml-api.ts`
 
 ## Decisões Técnicas
 - **Coleta**: Playwright com perfil Chrome persistente em `.chrome-profile/`.
