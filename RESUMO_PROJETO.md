@@ -4,7 +4,15 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 05/08/2026 - 15:51
+- **Última Atualização:** 05/08/2026 - 15:58
+
+- **05/08/2026 - 15:58:** **🚀 DEPLOY COMPLETO REALIZADO (GITHUB & VERCEL):**
+  - **Compilação TypeScript**: Executado `npm run build` com cópia de ativos estáticos da pasta `public` para `dist/public`.
+  - **Sincronização GitHub**: Todas as alterações locais foram comitadas e enviadas para o repositório remoto [`https://github.com/jc8702/robo-ml.git`](https://github.com/jc8702/robo-ml.git) na branch `main`.
+  - **Deploy Vercel Production**:
+    - Criado arquivo `.vercelignore` para otimização de upload.
+    - Realizado o deploy de produção no Vercel: URL oficial de produção [`https://ml-ofertas-bot-five.vercel.app`](https://ml-ofertas-bot-five.vercel.app).
+  - **Status do Deploy**: 100% concluído e operacional.
 
 - **05/08/2026 - 15:51:** **🔓 RESOLUÇÃO DEFINITIVA DE TRAVAMENTO NO EDITOR DE FOTO DO WHATSAPP WEB (`src/whatsapp/wa-playwright.ts`):**
   - **Identificação da Causa Raiz**: No editor de mídias (`div[role="dialog"]`), o clique exclusivo via seletores SVG em `[data-icon="send"]` por vezes não acionava a submissão no React do WhatsApp Web. Ao falhar, a rotina lançava uma exceção que desviava para a rota de fallback sem antes re-selecionar o grupo no `#side`, deixando a tela presa no modal de mídia. Além disso, o descarte em `forceClearAllWaModals` abria o popup de confirmação *"Descartar mídia?"* sem fechar o diálogo.
