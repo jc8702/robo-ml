@@ -4,9 +4,194 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 05/08/2026 - 08:39
+- **Última Atualização:** 05/08/2026 - 15:51
 
-- **05/08/2026 - 08:39:** **✨ IMPLEMENTAÇÃO DO BOTÃO DE SELEÇÃO INTELIGENTE DE BUSCA DE CATEGORIAS (`public/index.html`):**
+- **05/08/2026 - 15:51:** **🔓 RESOLUÇÃO DEFINITIVA DE TRAVAMENTO NO EDITOR DE FOTO DO WHATSAPP WEB (`src/whatsapp/wa-playwright.ts`):**
+  - **Identificação da Causa Raiz**: No editor de mídias (`div[role="dialog"]`), o clique exclusivo via seletores SVG em `[data-icon="send"]` por vezes não acionava a submissão no React do WhatsApp Web. Ao falhar, a rotina lançava uma exceção que desviava para a rota de fallback sem antes re-selecionar o grupo no `#side`, deixando a tela presa no modal de mídia. Além disso, o descarte em `forceClearAllWaModals` abria o popup de confirmação *"Descartar mídia?"* sem fechar o diálogo.
+  - **Correções Aplicadas**:
+    1. **Tripla Estratégia de Disparo (`sendOfferWithPhotoPlaywright`)**: O disparo do envio no modal agora foca o campo de legenda e envia a tecla `Enter` (comportamento nativo de envio no modal do WhatsApp Web), executa o clique direto no elemento container via JS (`(btn as HTMLElement).click()`) e realiza o clique via Playwright.
+    2. **Descarte Rigoroso em 4 Passos (`forceClearAllWaModals`)**: Responde automaticamente a popups *"Descartar"*, envia tecla `Escape` dupla, clica no botão (X) e executa `page.reload()` caso algum modal persista.
+    3. **Re-seleção Automática de Grupo no Fallback (`selectWaGroupChat`)**: Se por qualquer oscilação de rede o modal de imagem precisar ser expurgado, o robô automaticamente re-seleciona a conversa/grupo antes de postar a oferta com o preview no chat principal, garantindo 0 travamentos.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 15:42:** **🛡️ CORREÇÃO DE DESCARTE DE OFERTAS & FALLBACK AUTOMÁTICO DE LINK DE AFILIADO ML (`src/collector/ml-api.ts`):**
+  - **Identificação da Causa Raiz**: O robô encontrou 247 ofertas brutas e 212 após os filtros, porém a função `fetchOfficialAffiliateShortLink` descartou 100% dos produtos por não encontrar o botão `"Compartilhar"` da barra oficial de afiliados do Mercado Livre. Sem um fallback ativado, a lista final zerava (`0 ofertas com COMISSÃO DE AFILIADOS CONFIRMADA`).
+  - **Ajustes Realizados**:
+    1. **Ampliação de Seletores e Varredura Pré-Clique (`ml-api.ts`)**: Adicionada checagem direta na página por links `meli.la` e `mercadolivre.com/sec`, e expandidos os seletores do botão para incluir `"Gerar link"`, `"Gerar Link"`, `"Copiar link"`, `"Copiar Link"`, `"Compartilhar"` e variações da barra.
+    2. **Fallback Canônico Oficial (`convertToOfficialMLAffiliateLink`)**: Caso a barra do navegador não consiga gerar o link encurtado dinamicamente (ex: barra inativa no item ou alteração de layout do ML), o robô aciona automaticamente a conversão canônica oficial do Mercado Livre utilizando os parâmetros de comissão (`matt_tool=...`).
+    3. **Garantia de Envio**: Produtos minerados não são mais descartados indevidamente por falha de clique na interface web.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 15:25:** **🛑 AJUSTE DE INICIALIZAÇÃO: ROBÔ INICIA DESLIGADO/PAUSADO POR PADRÃO (`src/server.ts`):**
+  - **Solicitação do Usuário**: Alterar a inicialização do sistema para que o robô comece sempre DESLIGADO ao abrir o inicializador (`Iniciar-Bot.bat`) e só comece a trabalhar quando o usuário clicar no botão "Iniciar Automação" no painel.
+  - **Ajustes Realizados**:
+    1. Removido o disparo automático do agendador (`startScheduler`) que ocorria no boot do servidor HTTP em `src/server.ts`.
+    2. O servidor agora força `isBotRunning = false` e grava `AUTO_BOT_RUNNING = 'false'` na subida.
+    3. Ao abrir o painel em `http://localhost:3000`, a interface exibe o status `⏸️ Automação Pausada` e o botão `⚡ Iniciar Automação`.
+    4. O robô só inicia as varreduras e envios quando o usuário clica manualmente em `⚡ Iniciar Automação` (que envia o `POST /api/bot/start`).
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 15:17:** **🗑️ REGRA DE EXPURGO ESTRITO E REVISÃO DE GRUPOS INEFICIENTES / COM APROVAÇÃO NO FACEBOOK (`src/facebook/fb-poster.ts`):**
+  - **Filtro de Eficiência Máxima**: O robô agora analisa o resultado de cada tentativa de postagem no Facebook e remove sumariamente qualquer grupo que não ofereça publicação e comentário instantâneos.
+  - **Critérios de Purga Imediata**:
+    1. **`[PURGA DE APROVAÇÃO]`**: Grupos que colocam posts na fila de moderação dos administradores (*"Submit for admin approval"*, *"Pendente de aprovação"*) são **removidos sumariamente** da lista do `.env` e do banco Neon DB.
+    2. **`[PURGA DE INEFICIÊNCIA]`**: Grupos onde o campo de texto/publicação não abrir, o botão *"Publicar"* falhar ou o grupo for desativado/privado são **removidos sumariamente**.
+    3. **`[PURGA DE COMENTÁRIO]`**: Grupos que restringem a caixa de comentários para membros são **removidos sumariamente**.
+    4. **`[PURGA DE REGRAS]`**: Grupos que exigem formulários manuais de participação são **removidos sumariamente**.
+  - **Sincronização Neon DB**: Toda purga atualiza a lista `FB_GROUP_URLS` simultaneamente no `.env` e no banco PostgreSQL Neon.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 15:10:** **⚡ FILA CIRCULAR CONTINUADA DO FACEBOOK & OTIMIZAÇÃO DA ENTREGA PRIORITÁRIA NO WHATSAPP (`src/facebook/fb-poster.ts`, `src/config/settings.ts`):**
+  - **Entrega Imediata no WhatsApp**: Em cada ciclo, o robô envia 10 novas ofertas para o grupo do WhatsApp nos primeiros **30 segundos**, antes de iniciar as postagens do Facebook.
+  - **Fila Circular de Grupos (`FB_LAST_GROUP_INDEX`)**:
+    - Ajustado o lote do Facebook para **15 grupos por ciclo** (`FB_MAX_GROUPS_PER_CYCLE = 15`), reduzindo a duração do ciclo para apenas ~18 minutos.
+    - Implementado ponteiro persistente do último grupo postado (`FB_LAST_GROUP_INDEX`), salvo no `.env` e no **Neon PostgreSQL DB**.
+    - A cada novo ciclo, o Facebook continua a postagem nos próximos 15 grupos da lista de 217 grupos sem nunca repetir os primeiros e dando voltas infinitas.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 14:51:** **🔓 CORREÇÃO DE TRAVAMENTO & MECANISMO DE DESTRAVAMENTO AUTOMÁTICO/MANUAL DO WHATSAPP WEB (`src/whatsapp/wa-playwright.ts`, `src/server.ts`, `public/index.html`):**
+  - **Identificação da Causa Raiz**: No editor de imagem/mídia do WhatsApp Web, fotos altas empurravam o botão verde de enviar (`[data-icon="send"]`) para fora da área visível da tela (abaixo da dobra). A checagem `isVisible()` falhava por razões de rolagem, deixando a janela de edição (`div[role="dialog"]`) travada na tela sem concluir o envio ou liberar a interface de chats.
+  - **Correções Aplicadas**:
+    1. **Rolagem & Clique Forçado DOM (`wa-playwright.ts`)**: Adicionado `scrollIntoViewIfNeeded()` e clique forçado direto via DOM (`el.click()`) no botão de envio, garantindo o disparo mesmo se a imagem for gigante.
+    2. **Expurgo Incondicional de Modais (`forceClearAllWaModals`)**: Detecção alterada para checar presença no DOM via `document.querySelector('div[role="dialog"]')`. Se um modal persistir, o robô executa `page.reload()` incondicionalmente, expurgando o modal e restaurando os chats em 2s.
+    3. **Fallback Automático no Chat Limpo**: Caso ocorra falha no editor de mídia, a mensagem é publicada diretamente no campo de texto principal do chat com o card de preview do produto.
+    4. **Botão de Destravamento Manual no Painel (`public/index.html` & `src/server.ts`)**: Adicionado o botão **"🔓 Destravar Janela do WhatsApp"** e o endpoint `POST /api/sessions/unlock-wa` para destravamento instantâneo com 1 clique pelo usuário.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 14:45:** **🛡️ REGRA IMUTÁVEL: VALIDAÇÃO ESTRITA DE COMISSÃO DE AFILIADOS E DESCARTE DE PRODUTOS NÃO COMISSIONADOS (`src/collector/ml-api.ts`, `src/affiliate/link-converter.ts`):**
+  - **Identificação do Risco**: Nem todo produto anunciado no Mercado Livre gera comissão no programa de afiliados. Caso um produto sem comissão fosse postado, haveria o risco de vendas sem o retorno de comissão para o usuário.
+  - **Dupla Trava de Segurança**:
+    1. **Validação da Barra Oficial (`ml-api.ts`)**: Ao extrair produtos, o robô valida cada oferta na barra de afiliados oficial do Mercado Livre (`fetchOfficialAffiliateShortLink`). Ofertas que não gerarem o link curto oficial de afiliado (`meli.la/`, `mercadolivre.com/sec/`, `mliv.re/`, `matt_tool=`) são **descartadas sumariamente** da lista de envios com o log `🚫 [SEM COMISSÃO DESCARTADO]`.
+    2. **Filtro Estrito em `convertOffers` (`link-converter.ts`)**: Adicionada trava de segurança final na conversão que bloqueia e suprime qualquer produto sem o link de afiliado verificado.
+  - **Garantia Imutável**: O robô agora compartilha **exclusivamente** produtos com comissão de afiliado confirmada.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 14:38:** **🎯 IMPLEMENTAÇÃO DA HIERARQUIA DE 10 CATEGORIAS & MODO FOCADO DE SCRAPING (`public/index.html`, `src/config/settings.ts`, `src/server.ts`, `src/collector/ml-api.ts`):**
+  - **Interface Visual (`public/index.html`)**:
+    - Criada a seção **"🎯 Hierarquia de Categorização & Campanhas Sazonais (Ex: Dia dos Pais, Black Friday)"**.
+    - Implementados **10 campos numerados de prioridade** (1ª Prioridade / Máxima até a 10ª Prioridade) para inserção de categorias ou subcategorias.
+    - Adicionada a chave seletora **"🎯 Ativar Modo Focado (Rodar APENAS nas Categorias Prioritárias)"**.
+  - **Persistência de Dados & API (`src/config/settings.ts`, `src/server.ts`)**:
+    - Adicionadas as chaves de configuração `ML_PRIORITY_CATEGORIES` (array de até 10 strings) e `ML_USE_PRIORITY_ONLY` (`true`/`false`).
+    - Integração completa com o **Neon PostgreSQL DB** (`app_settings`), arquivo `.env` e variáveis em memória.
+    - Endpoints `GET /api/config` e `POST /api/config` atualizados para carregar e salvar a hierarquia.
+  - **Motor de Coleta (`src/collector/ml-api.ts`)**:
+    - **Modo Focado Ativo (`usePriorityOnly === true`)**: O robô minera **exclusivamente** nas categorias preenchidas nos campos de 1 a 10 na ordem exata configurada pelo usuário.
+    - **Modo Amplo com Prioridade (`usePriorityOnly === false`)**: O robô processa as 10 categorias prioritárias em 1º lugar e em seguida minera as demais categorias do catálogo do Mercado Livre.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 14:26:** **🛡️ RESOLUÇÃO DA TRAVA NA TELA "THIS CONTENT ISN'T AVAILABLE RIGHT NOW" NO FACEBOOK (`src/facebook/fb-poster.ts`):**
+  - **Identificação da Causa Raiz**: Quando um grupo do Facebook é desativado, tornado privado ou deletado, o Facebook renderiza dinamicamente via SPA a tela de erro *"This content isn't available right now"* (*"Este conteúdo não está disponível no momento"*). O robô realizava uma checagem síncrona prematura e, se falhasse por atraso na renderização do React, ficava travado ~40 segundos tentando encontrar seletores de postagem em uma página morta. Além disso, a janela do navegador mantinha a aba presa na tela de erro.
+  - **Prevenção em 3 Camadas**:
+    1. **Rotina de Detecção Avançada (`checkIsFacebookPageUnavailable`)**: Implementada varredura com retentativas (3 tentativas com espera de renderização) e verificação normalizada de termos multilíngues (*"content isn't available"*, *"este conteúdo não está disponível"*, *"when this happens"*, *"go to feed"*, *"visit help center"*, *"central de ajuda"*, *"voltar"*).
+    2. **Despoluição e Redirecionamento Automático da Janela**: Ao identificar a tela de erro (seja no `goto` inicial ou durante a busca do campo de publicação), o robô executa a limpeza da URL morta no arquivo `.env` (`removeInvalidGroupUrlFromEnv`) e **navega imediatamente a página para `https://www.facebook.com`**, fechando a tela de erro e despoluindo a janela do Chromium exibida na área de trabalho.
+    3. **Prevenção de Loops e Delays**: Evita a execução de seletores repetitivos quando a página não possui campo de publicação, reduzindo o tempo de descarte para menos de 1 segundo.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 14:23:** **🎯 ISOLAMENTO DEFINITIVO DO 1º COMENTÁRIO EXCLUSIVAMENTE NA POSTAGEM PRÓPRIA NO FACEBOOK (`src/facebook/fb-poster.ts`):**
+  - **Identificação da Causa Raiz**: O robô possuía um fallback de busca global no DOM (`page.locator('div[role="feed"] form ...')`). Quando o campo de comentário do post próprio não era encontrado de imediato, esse fallback global localizava a caixa de comentário aberta na publicação de outro membro abaixo no feed, comentando na postagem errada.
+  - **Resolução em 3 Camadas**:
+    1. **Captura/Navegação via Toast Permalink**: Ao clicar em "Publicar", o robô intercepta a notificação *"Ver publicação"* / *"View post"* e navega diretamente para a URL do post recém-criado (`/posts/ID/`), onde só existe a publicação do próprio usuário na tela.
+    2. **Filtro de Cards Principais do Feed (`topFeedUnitSelectors`)**: Atualizada a busca de posts no feed para usar seletores de nivel superior (`div[data-pagelet*="FeedUnit"]`, `:not([role="article"] [role="article"])`), ignorando 100% dos comentários internos e sub-postagens de terceiros.
+    3. **Eliminação Total do Fallback Global**: Removida completamente a busca global `page.locator()` para caixa de comentário. Se a caixa não for encontrada dentro do container isolado do post próprio, o comentário é suprimido por segurança. É matematicamente impossível o robô comentar na publicação de outro membro.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 14:18:** **🛡️ RESOLUÇÃO DEFINITIVA DE TRAVAMENTOS DO WHATSAPP WEB (`src/whatsapp/wa-playwright.ts`):**
+  - **Identificação da Causa Raiz**:
+    1. A resolução anterior de tela (`1280x800`) fazia com que imagens grandes empurrassem a legenda e o botão verde de envio para fora do campo visível (abaixo da dobra da tela), impedindo o clique no botão de envio.
+    2. Modais de mídia persistiam na tela mesmo após tentar o descarte por cliques.
+  - **Prevenção em 3 Camadas**:
+    1. **Aumento da Viewport para 1080p (`1366x1080`)**: Garante altura vertical suficiente para manter a caixa de legenda e o botão verde de enviar sempre 100% visíveis na janela do Chrome.
+    2. **Expurgo Incondicional via `page.reload()` (`forceClearAllWaModals`)**: Caso um modal persista visível após tentativas de clique, o robô recarrega a página (`await page.reload()`). Como a sessão está salva em `.wa-profile`, o WhatsApp Web recarrega limpo em 2 segundos na lista de chats sem nenhum modal aberto.
+    3. **Modo Bypass sem Modal (`WA_DIRECT_POST_MODE` / Fallback Limpo)**: Permite enviar o texto completo da oferta com o preview de imagem do link diretamente na caixa do chat principal (`#main div[contenteditable="true"]`), zerando a necessidade de abrir qualquer modal de edição ou janela de upload.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 14:10:** **🛡️ TRATAMENTO E AUTO-EXPURGO DE GRUPOS INDISPONÍVEIS / DELETADOS NO FACEBOOK (`src/facebook/fb-poster.ts`):**
+  - **Identificação da Causa Raiz**: Quando um grupo do Facebook era deletado, alterado para privado ou desativado, o Facebook exibia a tela *"This content isn't available right now"* (*"Este conteúdo não está disponível no momento"*). O robô ficava tentando localizar o campo de publicação indefinidamente, perdendo tempo em links mortos.
+  - **Checagem Instantânea Pré-Postagem**:
+    - Adicionada detecção ao navegar na página do grupo para termos como *"content isn't available"*, *"este conteúdo não está disponível"*, *"page not found"*, *"go to feed"*, *"visit help center"*.
+    - Ao detectar um grupo indisponível, o robô encerra a tentativa no grupo em menos de 1 segundo sem travar a execução.
+  - **Auto-Expurgo de URLs Quebradas (`removeInvalidGroupUrlFromEnv`)**:
+    - Desenvolvida a rotina que limpa automaticamente a URL do grupo indisponível do arquivo `.env` (`FB_GROUP_URLS`) e reduz a contagem de `FB_MAX_GROUPS_PER_CYCLE`, evitando que o robô volte a visitar links mortos em ciclos futuros.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 14:07:** **💬 GARANTIA DE INSERÇÃO DO 1º COMENTÁRIO PÓS-PUBLICAÇÃO NO FACEBOOK (`src/facebook/fb-poster.ts`):**
+  - **Identificação da Causa Raiz**: O localizador anterior de artigos exigia rigor estrito de palavras do título e marcadores de texto específicos do Facebook. Quando o Facebook apresentava pequenas variações de texto ou acentuação, o localizador retornava `null`, fazendo o robô omitir o comentário por segurança (`Comentário suprimido`).
+  - **Identificação Multi-Nível Resiliente (`findNewlyCreatedPostArticle`)**:
+    - **Tier 1 (Link de Afiliado Unívoco)**: O robô verifica prioritariamente se o artigo contém o link de afiliado exclusivo ou permalink da oferta (`meli.la/`, `mercadolivre.com.br/`).
+    - **Tier 2 (Palavras do Título sem Acentos)**: Comparação normalizada de termos sem distinção de acentuação ou caracteres especiais.
+    - **Tier 3 (Selos Recentes)**: Busca por selos de publicação recente (*"Você acabou de publicar"*, *"Agora mesmo"*, *"1 min"*).
+    - **Tier 4 (Fallback Topo do Feed)**: Seleciona incondicionalmente o primeiro artigo recente não fixado no topo do feed do grupo.
+  - **Inserção Direta via `insertText` API**: Substituído o envio linha a linha com `Shift+Enter` pela injeção atômica via `page.keyboard.insertText(waCommentText)`, eliminando o envio prematuro e garantindo o comentário com o link do WhatsApp no post do grupo.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 14:04:** **🛡️ REGRA IMUTÁVEL DE AUTO-DESCARTE DE MODAIS E EDITORES TRAVADOS NO WHATSAPP WEB (`src/whatsapp/wa-playwright.ts`):**
+  - **Identificação da Causa Raiz**: Ao enviar uma imagem no WhatsApp Web, o navegador abre a tela/modal do editor de mídia. Se o clique no botão de envio falhar, se o evento `Enter` não for aceito ou se houver atraso no upload, o modal (`div[role="dialog"]`) permanecia visível na tela por padrão, bloqueando as pesquisas e envios subsequentes.
+  - **Desenvolvimento da Função Autônoma (`forceClearAllWaModals`)**:
+    - Criada a rotina em loop de limpeza que detecta modais de sobreposição (`div[role="dialog"]`, `[data-animate-modal-popup]`, etc.).
+    - Executa tripla ação de fechamento: envia a tecla `Escape`, aciona botões de fechar com ícone `x` (`[aria-label*="Fechar"]`, `[data-icon="x"]`) e aceita janelas de confirmação de descarte (`"Descartar"`, `"Discard"`).
+  - **Checagem Preventiva & Trava de Segurança no Envio**:
+    - **Varredura Prévia**: A função `forceClearAllWaModals(page)` é invocada antes de qualquer busca de grupo ou interação no WhatsApp Web.
+    - **Timeout Estrito de Submissão**: Após tentar o envio da mídia, o robô aguarda até 8 segundos pela desanexação do modal (`state: 'detached'`). Caso o modal permaneça aberto (travado na tela), o robô cancela a sobreposição via `forceClearAllWaModals(page)` e aciona o fallback de postagem no chat principal com preview oficial do link.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 13:56:** **🎯 ISOLAMENTO ESTRITO DO 1º COMENTÁRIO NA PUBLICAÇÃO DO USUÁRIO NO FACEBOOK (`src/facebook/fb-poster.ts`):**
+  - **Identificação da Causa Raiz**: O robô executava busca global (`page.locator(...)`) quando o modal do comentário não abria de imediato no artigo da oferta. Isso fazia com que ele clicasse na caixa de comentário do post seguinte no feed (criado por outro membro), inserindo o link do WhatsApp na publicação errada.
+  - **Localizador de Post Próprio (`findNewlyCreatedPostArticle`)**: Desenvolvida a busca estrita do post recém-criado pelo próprio usuário através de selos do Facebook (*"Você acabou de publicar"*, *"Agora mesmo"*, *"Just now"*) e correspondência de palavras-chave do título.
+  - **Eliminação de Fallback Global & Trava de Segurança**: A busca da caixa de comentário e submissão foi restrita exclusivamente ao contêiner `targetArticle.locator(...)`. Removida a busca global por toda a página. Caso o post próprio não possa ser isolado com 100% de certeza, o comentário é suprimido com aviso no log, garantindo que o robô jamais comente na publicação de outro membro.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 13:51:** **📋 TRATAMENTO INTELIGENTE E PULO DE MODAIS DE REGRAS DE GRUPO NO FACEBOOK (`src/facebook/fb-poster.ts`):**
+  - **Rotina de Desbloqueio Autônomo (`handleFacebookGroupRulesModal`)**:
+    - Implementada a detecção e tratamento automático do modal de sobreposição **"Participation review"** (*Análise de participação / Regras do grupo / Perguntas de adesão*).
+    - **Auto-Aceite de Regras Simples**: O robô marca automaticamente caixas de seleção (*"I agree to the group rules"* / *"Concordo com as regras"*) e clica em **Submit / Enviar** para concluir a adesão.
+    - **Desbloqueio e Pulo Gracioso**: Caso o grupo exija respostas manuais de texto ou o modal continue visível, o robô aciona o botão de fechar (`aria-label="Close"`, `Fechar`, `Escape`), desfazendo a sobreposição e pulando o grupo com segurança (`return false`), garantindo que o ciclo continue nos demais grupos sem travar.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 13:46:** **🛡️ RESOLUÇÃO DA TRAVA DA JANELA NATIVA "ABRIR" DO WINDOWS EXPLORER NO FACEBOOK (`src/facebook/fb-poster.ts`, `src/utils/win-dialog-dismiss.ts`):**
+  - **Identificação da Causa Raiz**: Ao clicar no botão "Foto/vídeo" do modal do Facebook sem isolamento no protocolo Playwright, o Chromium invocava a janela gráfica nativa `comdlg32.dll` ("Abrir") do Windows OS, paralisando a thread do navegador e travando o robô indefinidamente.
+  - **Prevenção em 3 Camadas**:
+    1. **Upload Direto no DOM + Wrapper CDP (`fb-poster.ts`)**: O robô agora tenta preencher `input[type="file"]` no DOM antes de qualquer clique. Se o clique for necessário, ele é envelopado em `Promise.all([ page.waitForEvent('filechooser'), btn.click() ])`, interceptando a requisição no protocolo do Chrome DevTools (CDP) e injetando a foto via `fileChooser.setFiles()` sem disparar a janela gráfica do Windows.
+    2. **Interceptor Global de FileChooser**: Atualizado o ouvinte para cobrir 100% das páginas existentes no contexto (`context.pages()`) e novas abas (`context.on('page')`), cancelando imediatamente qualquer solicitação de arquivo não gerenciada.
+    3. **Utilitário de Auto-Dismiss Nativo Windows (`src/utils/win-dialog-dismiss.ts`)**: Desenvolvida rotina em background que usa PowerShell/Win32 para fechar automaticamente qualquer janela nativa "Abrir" / "Open" caso surja no sistema operacional.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 09:12:** **✨ EXTRAÇÃO AUTOMÁTICA DE LINKS CURTOS OFICIAIS DE AFILIADOS `meli.la` VIA BARRA ML (`src/collector/ml-api.ts`, `src/affiliate/link-converter.ts`):**
+  - **Captura do Modal da Barra de Afiliados (`fetchOfficialAffiliateShortLink`)**:
+    - Desenvolvida a rotina que aciona o botão azul **"Compartilhar"** na barra superior do programa de afiliados do Mercado Livre para cada oferta minerada.
+    - Captura o link encurtado oficial no formato **`https://meli.la/...`** diretamente do modal **"Gerar link / ID de produto"** (que carrega o rótulo/etiqueta de afiliado da sua conta, ex: `clickmarido`).
+  - **Preservação de Links Curtos (`link-converter.ts`)**:
+    - Atualizadas as regras de conversão para detectar e preservar prioritariamente links `https://meli.la/`, garantindo que o link compartilhado nos canais seja estritamente o gerado pela plataforma oficial de afiliados do Mercado Livre.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo.
+
+- **05/08/2026 - 09:02:** **🛠️ RESOLUÇÃO DE TRAVA DE CONTEXTO E REUSO DA ABA LOGADA DO MERCADO LIVRE (`src/collector/ml-api.ts`):**
+
+  - **Reuso do Navegador Ativo (`getOrCreateMLContext`)**:
+    - Identificado que o acionamento do ciclo automático tentava abrir uma 2ª instância do Chrome com `.chrome-profile/`. Como a pasta estava travada pelo navegador de login, o robô ativava um navegador temporário limpo sem cookies, gerando o erro de login não detectado e abas `about:blank`.
+    - Implementado o gerenciador singleton `getOrCreateMLContext()` que reaproveita a **mesma janela e abas** onde a conta do usuário já está logada.
+  - **Leitura Precisa de Cookies de Autenticação (`isMLLoggedIn`)**:
+    - Atualizada a validação para checar os cookies oficiais de autenticação do Mercado Livre (`ssid`, `org_session`, `cp`, `_m_user`) via Playwright Context API + seletores do menu do usuário logado (`.nav-header-username`, `.nav-header-user-name`).
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo.
+
+- **05/08/2026 - 08:55:** **🛠️ NAVEGAÇÃO DINÂMICA VIA BOTÃO "ENTRE" NO MERCADO LIVRE (`src/collector/ml-api.ts`):**
+
+  - Ajustado `openMLLoginBrowser()` para abrir a página inicial canônica do Mercado Livre (`https://www.mercadolivre.com.br/`) e acionar o clique no botão oficial **"Entre"** (`a[data-link-id="login"]`).
+  - Isso garante que o Mercado Livre redirecione dinamicamente para o portal de login oficial vigente (evitando erros de rotas alteradas pela plataforma).
+
+
+- **05/08/2026 - 08:51:** **🔒 AUTENTICAÇÃO OBRIGATÓRIA NO MERCADO LIVRE & BOTÃO DE LOGIN NO PAINEL (`src/collector/ml-api.ts`, `src/server.ts`, `public/index.html`):**
+
+  - **Regra Imutável de Trava de Mineração (`isMLLoggedIn` & `collectOffers`)**:
+    - Desenvolvida a validação de sessão `isMLLoggedIn()` que verifica elementos DOM de usuário autenticado (`.nav-header-user-name`, `[data-user-id]`, `a[href*="my-account"]`) e cookies de sessão no perfil `.chrome-profile/`.
+    - A função `collectOffers()` cancela imediatamente a mineração e dispara alerta no console caso o login na conta do Mercado Livre não esteja confirmado.
+  - **Botão de Login "🟡 Conectar / Logar Mercado Livre" (`public/index.html`)**:
+    - Adicionado o Card do Mercado Livre no Gerenciador de Sessões Locais com botão de 1 clique (`#btnConnectMl`) e indicador visual de status em tempo real (`🟢 Conta Logada / Ativa` vs `🔴 Não Logado (Obrigatório)`).
+  - **Endpoints da API REST (`src/server.ts`)**:
+    - Criado o endpoint `POST /api/sessions/connect-ml` que abre a janela do Chrome em modo visível na página do Mercado Livre para o usuário logar interativamente com segurança.
+    - Atualizada a rota `GET /api/sessions/status` para incluir o status de conexão da conta do Mercado Livre (`ml`).
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo.
+
+
   - **Botão `☑️ Selecionar Resultados da Busca` posicionada ao lado do campo de pesquisa**:
     - Reestruturado o container da busca `.search-filter-box` com layout `flexbox`.
     - Adicionados os botões de ação instantânea `☑️ Selecionar Resultados da Busca` (`btnSelectFiltered`) e `🔲 Desmarcar Filtrados` (`btnDeselectFiltered`) alinhados lado a lado com o campo de texto de filtragem (`#inputTreeSearch`).

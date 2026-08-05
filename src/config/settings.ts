@@ -70,6 +70,8 @@ export interface AppConfig {
     maxPrice: number;
     maxResults: number;
     categories: string[];
+    priorityCategories: string[];
+    usePriorityOnly: boolean;
   };
   queries: string[];
   output: {
@@ -98,6 +100,8 @@ export function loadConfig(): AppConfig {
 
   const parsedCat = parseList(process.env.ML_CATEGORIES);
   const categories = parsedCat.length > 0 ? parsedCat : DEFAULT_CATEGORIES;
+  const priorityCategories = parseList(process.env.ML_PRIORITY_CATEGORIES);
+  const usePriorityOnly = process.env.ML_USE_PRIORITY_ONLY === 'true';
 
   return {
     affiliate: {
@@ -111,6 +115,8 @@ export function loadConfig(): AppConfig {
       maxPrice: Number(process.env.ML_MAX_PRICE ?? 10000),
       maxResults: Number(process.env.ML_MAX_RESULTS ?? 35),
       categories,
+      priorityCategories,
+      usePriorityOnly,
     },
     queries: categories,
     output: {
@@ -124,7 +130,7 @@ export function loadConfig(): AppConfig {
     facebook: {
       enabled: process.env.FB_ENABLED === 'true',
       groupUrls: parseList(process.env.FB_GROUP_URLS),
-      maxGroupsPerCycle: Number(process.env.FB_MAX_GROUPS_PER_CYCLE ?? 64),
+      maxGroupsPerCycle: Number(process.env.FB_MAX_GROUPS_PER_CYCLE ?? 15),
       delayBetweenPostsSec: Number(process.env.FB_DELAY_BETWEEN_POSTS ?? 60),
       waGroupLink: process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
       autoJoin: process.env.FB_AUTO_JOIN !== 'false',
@@ -164,6 +170,10 @@ export async function loadConfigAsync(): Promise<AppConfig> {
   const affiliateWord = dbSettings.ML_AFFILIATE_WORD || process.env.ML_AFFILIATE_WORD || 'promos-wa';
   const accessToken = process.env.ML_ACCESS_TOKEN || '';
 
+  const priorityCatStr = dbSettings.ML_PRIORITY_CATEGORIES || process.env.ML_PRIORITY_CATEGORIES;
+  const priorityCategories = priorityCatStr ? parseList(priorityCatStr) : [];
+  const usePriorityOnly = dbSettings.ML_USE_PRIORITY_ONLY ? dbSettings.ML_USE_PRIORITY_ONLY === 'true' : process.env.ML_USE_PRIORITY_ONLY === 'true';
+
   return {
     affiliate: {
       id: affiliateId,
@@ -176,6 +186,8 @@ export async function loadConfigAsync(): Promise<AppConfig> {
       maxPrice,
       maxResults,
       categories,
+      priorityCategories,
+      usePriorityOnly,
     },
     queries: categories,
     output: {
@@ -189,7 +201,7 @@ export async function loadConfigAsync(): Promise<AppConfig> {
     facebook: {
       enabled: dbSettings.FB_ENABLED ? dbSettings.FB_ENABLED === 'true' : process.env.FB_ENABLED === 'true',
       groupUrls: parseList(dbSettings.FB_GROUP_URLS).length > 0 ? parseList(dbSettings.FB_GROUP_URLS) : parseList(process.env.FB_GROUP_URLS),
-      maxGroupsPerCycle: Number(dbSettings.FB_MAX_GROUPS_PER_CYCLE || process.env.FB_MAX_GROUPS_PER_CYCLE || 64),
+      maxGroupsPerCycle: Number(dbSettings.FB_MAX_GROUPS_PER_CYCLE || process.env.FB_MAX_GROUPS_PER_CYCLE || 15),
       delayBetweenPostsSec: Number(dbSettings.FB_DELAY_BETWEEN_POSTS || process.env.FB_DELAY_BETWEEN_POSTS || 60),
       waGroupLink: dbSettings.FB_WA_GROUP_LINK || process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
       autoJoin: dbSettings.FB_AUTO_JOIN ? dbSettings.FB_AUTO_JOIN === 'true' : process.env.FB_AUTO_JOIN !== 'false',

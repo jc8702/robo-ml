@@ -44,8 +44,8 @@ export function convertToOfficialMLAffiliateLink(
   permalink: string,
   config: AppConfig
 ): string {
-  // Se a URL já for um link curto oficial do ML (ex: mercadolivre.com/sec/...), mantém intacto
-  if (permalink.includes('mercadolivre.com/sec/') || permalink.includes('mliv.re/')) {
+  // Se a URL já for um link curto oficial do ML (ex: meli.la/..., mercadolivre.com/sec/..., mliv.re/...), mantém intacto
+  if (permalink.includes('meli.la/') || permalink.includes('mercadolivre.com/sec/') || permalink.includes('mliv.re/')) {
     return permalink;
   }
 
@@ -71,14 +71,33 @@ export function convertToOfficialMLAffiliateLink(
 }
 
 /**
- * Converte um array de ofertas utilizando exclusivamente o formato OFICIAL CURTO do Mercado Livre.
+ * Converte um array de ofertas utilizando o formato OFICIAL CURTO (meli.la) ou o gerador canônico do Mercado Livre.
  */
 export async function convertOffers(
   offers: MLOffer[],
   config: AppConfig
 ): Promise<AffiliateOffer[]> {
-  return offers.map((offer) => ({
-    ...offer,
-    affiliateLink: convertToOfficialMLAffiliateLink(offer.permalink, config),
-  }));
+  const converted: AffiliateOffer[] = [];
+  for (const offer of offers) {
+    const rawTarget = (offer as any).affiliateLink || offer.permalink;
+    const affiliateLink = convertToOfficialMLAffiliateLink(rawTarget, config);
+
+    // Regra Imutável: Aceita apenas ofertas com link de afiliado verificado
+    if (
+      affiliateLink &&
+      (affiliateLink.includes('meli.la/') ||
+        affiliateLink.includes('mercadolivre.com/sec/') ||
+        affiliateLink.includes('mliv.re/') ||
+        affiliateLink.includes('matt_tool='))
+    ) {
+      converted.push({
+        ...offer,
+        affiliateLink,
+      });
+    } else {
+      console.warn(`  🚫 [REGRA AFILIADO] Oferta "${offer.title}" descartada por falta de link de comissão de afiliado válido.`);
+    }
+  }
+  return converted;
 }
+

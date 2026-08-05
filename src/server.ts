@@ -10,7 +10,9 @@ import { getSentOffersHistoryFromDb, clearSentHistory } from './collector/histor
 import { checkWhatsAppSessionStatus, ensureWhatsAppLoggedIn } from './whatsapp/wa-playwright.js';
 import { checkFacebookSessionStatus, openFacebookBrowser } from './facebook/fb-poster.js';
 import { checkInstagramSessionStatus, openInstagramBrowser } from './instagram/ig-poster.js';
+import { checkMLLoginStatus, openMLLoginBrowser } from './collector/ml-api.js';
 import { getMercadoLivreCategoryCacheInfo, getMercadoLivreCategoryQuery, loadMercadoLivreCategoryCatalog } from './ml/categories.js';
+
 
 
 
@@ -238,6 +240,8 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
 
     return sendJson({
       categories: config.filters.categories,
+      priorityCategories: config.filters.priorityCategories,
+      usePriorityOnly: config.filters.usePriorityOnly,
       queries: config.queries,
       minPrice: config.filters.minPrice,
       maxPrice: config.filters.maxPrice,
@@ -280,6 +284,16 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
           .map((query: string) => query.trim())
           .filter(Boolean);
         updates.ML_CATEGORIES = queries.join(',');
+      }
+      if (Array.isArray(body.priorityCategories)) {
+        const priorityList = body.priorityCategories
+          .map((item: unknown) => (typeof item === 'string' ? item.trim() : ''))
+          .filter(Boolean)
+          .slice(0, 10);
+        updates.ML_PRIORITY_CATEGORIES = priorityList.join(',');
+      }
+      if (body.usePriorityOnly !== undefined) {
+        updates.ML_USE_PRIORITY_ONLY = body.usePriorityOnly ? 'true' : 'false';
       }
       if (Array.isArray(body.queries)) updates.ML_SEARCH_QUERIES = body.queries.join(',');
       if (typeof body.affiliateId === 'string' && body.affiliateId.trim()) updates.ML_AFFILIATE_ID = body.affiliateId.trim();
@@ -477,11 +491,20 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
 
   // GET /api/sessions/status - Retorna o status de conexão local de cada rede
   if (method === 'GET' && (url === '/api/sessions/status' || url.endsWith('/sessions/status'))) {
+    const mlStatus = await checkMLLoginStatus().catch(() => false);
     return sendJson({
       wa: checkWhatsAppSessionStatus(),
       fb: checkFacebookSessionStatus(),
       ig: checkInstagramSessionStatus(),
+      ml: mlStatus,
     });
+  }
+
+  // POST /api/sessions/connect-ml - Abre conector local do Mercado Livre
+  if (method === 'POST' && (url === '/api/sessions/connect-ml' || url.endsWith('/connect-ml'))) {
+    console.log('[SERVER] 🟡 Disparando abertura do Chrome para login no Mercado Livre...');
+    openMLLoginBrowser().catch((err) => console.error('[SERVER] Erro no Mercado Livre:', err));
+    return sendJson({ success: true, message: '🟡 Janela do Chrome aberta para login na sua conta do Mercado Livre!' });
   }
 
   // POST /api/sessions/connect-wa - Abre conector local do WhatsApp
@@ -489,6 +512,20 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
     console.log('[SERVER] 🟢 Disparando abertura do Chrome para login no WhatsApp...');
     ensureWhatsAppLoggedIn().catch((err) => console.error('[SERVER] Erro no WhatsApp:', err));
     return sendJson({ success: true, message: '🟢 Janela do Chrome aberta para login no WhatsApp!' });
+  }
+
+  // POST /api/sessions/unlock-wa - Força a limpeza e recarregamento incondicional da janela do WhatsApp Web
+  if (method === 'POST' && (url === '/api/sessions/unlock-wa' || url.endsWith('/unlock-wa'))) {
+    console.log('[SERVER] 🔓 Disparando destravamento incondicional do WhatsApp Web...');
+    try {
+      const { forceClearAllWaModals, openWhatsAppBrowser } = await import('./whatsapp/wa-playwright.js');
+      const { page } = await openWhatsAppBrowser();
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+      await forceClearAllWaModals(page);
+      return sendJson({ success: true, message: '🔓 Janela do WhatsApp Web destravada e recarregada com sucesso!' });
+    } catch (err) {
+      return sendJson({ success: false, message: 'Erro ao destravar WhatsApp: ' + String(err) }, 500);
+    }
   }
 
   // POST /api/sessions/connect-fb - Abre conector local do Facebook
@@ -512,6 +549,7 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
     }).catch((err) => console.error('[SERVER] Erro no Instagram:', err));
     return sendJson({ success: true, message: '📸 Janela do Chrome aberta para login no Instagram!' });
   }
+
 
   // Fallback 404
   res.writeHead(404);
@@ -552,14 +590,12 @@ async function startServerCallback() {
     exec(openCmd, () => {});
   }
 
-  // Auto-inicia o bot se estiver marcado como ativo no Neon DB ou RENDER/AUTO_START
-  const dbSettings = (await dbGetSettings().catch(() => ({}))) as Record<string, string>;
-  if (dbSettings.AUTO_BOT_RUNNING === 'true' || process.env.AUTO_BOT_RUNNING === 'true' || process.env.RENDER || process.env.AUTO_START === 'true') {
-    console.log('[BOT] Restaurando estado ativo do bot de ofertas (24/7)...');
-    isBotRunning = true;
-    const config = await loadConfigAsync();
-    startScheduler(config).catch((err) => console.error('Erro ao iniciar agendador:', err));
-  }
+  // O robô inicia sempre DESLIGADO (pausado) por padrão ao subir o servidor.
+  // Ele só começará a trabalhar quando o usuário clicar no botão "Iniciar Automação" no painel.
+  isBotRunning = false;
+  await dbSaveMultipleSettings({ AUTO_BOT_RUNNING: 'false' }).catch(() => {});
+  process.env.AUTO_BOT_RUNNING = 'false';
+  console.log('[BOT] Robô inicializado em modo DESLIGADO (Pausado). Aguardando comando no painel visual.');
 }
 
 // Handlers de exceção global para resiliência 24/7

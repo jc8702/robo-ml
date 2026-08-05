@@ -147,13 +147,16 @@ export async function openInstagramBrowser(): Promise<BrowserContext> {
     } catch {}
   });
 
-  // Interceptor global: cancela automaticamente qualquer janela nativa Explorer do SO
-  context.on('page', (p) => {
+  // Interceptor global: cancela automaticamente qualquer janela nativa Explorer do SO em TODAS as páginas
+  const registerFileChooserInterceptor = (p: Page) => {
     p.on('filechooser', async (fc) => {
-      console.log('[IG] 🛡️ Interceptado FileChooser do SO no Instagram. Fechando janela nativa automaticamente...');
+      console.log('[IG] 🛡️ Interceptado FileChooser do SO no Instagram. Fechando/cancelando janela nativa automaticamente...');
       await fc.setFiles([]).catch(() => {});
     });
-  });
+  };
+
+  context.pages().forEach(registerFileChooserInterceptor);
+  context.on('page', registerFileChooserInterceptor);
 
   await restoreIgCookiesFromDb(context);
   return context;

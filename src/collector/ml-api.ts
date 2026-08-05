@@ -1,15 +1,18 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { join } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import type { AppConfig } from '../config/settings.js';
 import { findBrowserPath, isCloudEnvironment } from '../config/browser.js';
 import { loadSentHistory, normalizeTitleKey, isLowestPriceIn30Days } from './history.js';
+import { convertToOfficialMLAffiliateLink } from '../affiliate/link-converter.js';
+
 
 /** Representa uma oferta coletada do Mercado Livre */
 export interface MLOffer {
   id: string;
   title: string;
   permalink: string;
+  affiliateLink?: string;
   thumbnail: string;
   originalPrice: number;
   currentPrice: number;
@@ -21,9 +24,24 @@ export interface MLOffer {
   isLowest30Days?: boolean;
 }
 
+
 const BROWSER_PROFILE_DIR = join(process.cwd(), '.chrome-profile');
 
-// findBrowserPath() e isCloudEnvironment() importados de ../config/browser.js
+let activeMLContext: BrowserContext | null = null;
+let activeMLBrowser: Browser | null = null;
+
+
+function cleanProfileLock(profileDir: string) {
+  const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lockfile'];
+  for (const lockFile of lockFiles) {
+    const lockPath = join(profileDir, lockFile);
+    if (existsSync(lockPath)) {
+      try {
+        unlinkSync(lockPath);
+      } catch {}
+    }
+  }
+}
 
 /**
  * Cria uma instância com perfil persistente + contexto com User-Agent oficial de Desktop Chrome.
@@ -65,11 +83,11 @@ async function openBrowser(): Promise<{ browser: Browser; context: BrowserContex
   try {
     context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, contextOptions);
   } catch {
-    delete contextOptions.executablePath;
+    cleanProfileLock(BROWSER_PROFILE_DIR);
     try {
       context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, contextOptions);
     } catch {
-      // Fallback em caso de lock no perfil persistente por outro processo
+      delete contextOptions.executablePath;
       const browser = await chromium.launch({
         headless: isCloud,
         args: contextOptions.args,
@@ -93,8 +111,197 @@ async function openBrowser(): Promise<{ browser: Browser; context: BrowserContex
 }
 
 /**
+ * Obtém ou reaproveita o contexto de navegador ativo do Mercado Livre
+ */
+async function getOrCreateMLContext(): Promise<{ browser: Browser; context: BrowserContext }> {
+  if (isContextValid(activeMLContext)) {
+    return { browser: activeMLBrowser || (activeMLContext as any), context: activeMLContext! };
+  }
+
+  activeMLContext = null;
+  activeMLBrowser = null;
+  cleanProfileLock(BROWSER_PROFILE_DIR);
+
+  const res = await openBrowser();
+  activeMLBrowser = res.browser;
+  activeMLContext = res.context;
+  return res;
+}
+
+/**
+ * Verifica se a página atual tem sessão de usuário ativa no Mercado Livre.
+ */
+export async function isMLLoggedIn(page: Page): Promise<boolean> {
+  try {
+    const currentUrl = page.url();
+    if (!currentUrl.includes('mercadolivre.com.br')) {
+      await page.goto('https://www.mercadolivre.com.br', { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+    }
+
+    // 1. Checagem via Cookies de Contexto do Playwright (Fiel e imune a alterações de layout)
+    const context = page.context();
+    if (context) {
+      const cookies = await context.cookies('https://www.mercadolivre.com.br').catch(() => []);
+      const hasAuthCookie = cookies.some(c => 
+        ['ssid', 'org_session', 'cp', '_m_user', 'is_user_logged_in', 'user_id', 'org_user_id'].includes(c.name)
+      );
+      if (hasAuthCookie) return true;
+    }
+
+    // 2. Checagem no DOM da página
+    const isLoggedIn = await page.evaluate(() => {
+      const userSelectors = [
+        '.nav-header-username',
+        '.nav-header-user-name',
+        '.nav-header-user',
+        '.nav-header-avatar',
+        'label[for="nav-header-user-switch"]',
+        'a[href*="my-account"]',
+        'a[href*="compras"]',
+        'a[href*="favoritos"]',
+        '#nav-header-user-switch'
+      ];
+      
+      const hasUserElement = userSelectors.some(sel => !!document.querySelector(sel));
+      if (hasUserElement) return true;
+
+      const navUserText = (document.querySelector('header.nav-header, nav.nav-header-menu, div.nav-header-user')?.textContent || '').toLowerCase();
+      if (navUserText.includes('compras') || navUserText.includes('favoritos')) return true;
+
+      const cookies = document.cookie;
+      return cookies.includes('org_session') || cookies.includes('ssid') || cookies.includes('cp') || cookies.includes('_m_user');
+    });
+
+    return isLoggedIn;
+  } catch (err) {
+    console.error('[ML] Erro ao verificar login no Mercado Livre:', err);
+    return false;
+  }
+}
+
+/**
+ * Retorna se o usuário está logado no Mercado Livre (para uso na API REST).
+ */
+export async function checkMLLoginStatus(): Promise<boolean> {
+  try {
+    const { context } = await getOrCreateMLContext();
+    const pages = context.pages().filter(p => !p.isClosed());
+    const page = pages.length > 0 ? pages[0] : await context.newPage();
+    return await isMLLoggedIn(page);
+  } catch (err) {
+    console.error('[ML] Erro ao verificar status do Mercado Livre:', err);
+    return false;
+  }
+}
+
+/**
+ * Abre o Chrome visível para que o usuário efetue o login na sua conta do Mercado Livre.
+ */
+export async function openMLLoginBrowser(): Promise<BrowserContext> {
+  const { context } = await getOrCreateMLContext();
+  const pages = context.pages().filter(p => !p.isClosed());
+  const page = pages.length > 0 ? pages[0] : await context.newPage();
+  
+  await page.goto('https://www.mercadolivre.com.br/', { waitUntil: 'domcontentloaded' });
+  
+  const logged = await isMLLoggedIn(page);
+  if (!logged) {
+    const loginBtn = page.locator('a[data-link-id="login"], a:has-text("Entre"), nav a[href*="login"]').first();
+    if (await loginBtn.isVisible().catch(() => false)) {
+      await loginBtn.click().catch(() => {});
+    }
+  }
+  return context;
+}
+
+
+
+
+
+/**
+ * Extrai o link curto oficial de afiliado (meli.la) acionando a barra oficial de afiliados do Mercado Livre.
+ */
+export async function fetchOfficialAffiliateShortLink(
+  page: Page,
+  permalink: string
+): Promise<string | null> {
+  try {
+    const cleanUrl = permalink.split('?')[0].split('#')[0];
+    const currentUrl = page.url();
+    if (!currentUrl.includes(cleanUrl)) {
+      await page.goto(cleanUrl, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+    }
+
+    await page.waitForTimeout(1200);
+
+    // 0. Verifica se a página ou a barra já contêm diretamente um link curto (meli.la / mercadolivre.com/sec)
+    const directVal = await page.evaluate(() => {
+      const elements = Array.from(document.querySelectorAll('a[href], input[value], textarea'));
+      for (const el of elements) {
+        const val = (el as HTMLAnchorElement).href || (el as HTMLInputElement).value || el.textContent || '';
+        if (val.includes('meli.la/') || val.includes('mercadolivre.com/sec/') || val.includes('mliv.re/')) {
+          const match = val.match(/https?:\/\/(?:meli\.la|mercadolivre\.com\/sec|mliv\.re)\/[a-zA-Z0-9_-]+/i);
+          if (match) return match[0];
+        }
+      }
+      return null;
+    });
+
+    if (directVal) {
+      console.log(`  ✨ Link curto oficial extraído diretamente da página Mercado Livre: ${directVal}`);
+      return directVal;
+    }
+
+    // Procura o botão de ação na barra superior/inferior de afiliados do Mercado Livre
+    const shareBtn = page.locator(
+      'button:has-text("Compartilhar"), button:has-text("Gerar link"), button:has-text("Gerar Link"), button:has-text("Copiar link"), button:has-text("Copiar Link"), div:has-text("GANHOS") button, button[class*="share"], button[class*="affiliate"], a:has-text("Compartilhar"), a:has-text("Gerar link")'
+    ).first();
+    
+    if (await shareBtn.isVisible({ timeout: 4000 }).catch(() => false)) {
+      await shareBtn.click().catch(() => {});
+      await page.waitForTimeout(1200);
+
+      // 1. Tenta pegar o valor de um input que contenha 'meli.la' ou 'mercadolivre.com/sec'
+      const meliInput = page.locator('input[value*="meli.la"], input[value*="mercadolivre.com/sec"], input[value*="mliv.re"]').first();
+      if (await meliInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+        const val = await meliInput.inputValue().catch(() => '');
+        if (val && val.startsWith('http')) {
+          console.log(`  ✨ Link curto oficial extraído da barra Mercado Livre: ${val}`);
+          await page.keyboard.press('Escape').catch(() => {});
+          return val;
+        }
+      }
+
+      // 2. Fallback de varredura no modal de compartilhamento
+      const extractedVal = await page.evaluate(() => {
+        const inputs = Array.from(document.querySelectorAll('input, textarea, a[href], p, span, div'));
+        for (const input of inputs) {
+          const val = (input as HTMLInputElement).value || (input as HTMLAnchorElement).href || input.textContent || '';
+          if (val.includes('meli.la/') || val.includes('mercadolivre.com/sec/') || val.includes('mliv.re/')) {
+            const match = val.match(/https?:\/\/(?:meli\.la|mercadolivre\.com\/sec|mliv\.re)\/[a-zA-Z0-9_-]+/i);
+            if (match) return match[0];
+          }
+        }
+        return null;
+      });
+
+      await page.keyboard.press('Escape').catch(() => {});
+
+      if (extractedVal) {
+        console.log(`  ✨ Link curto oficial extraído da barra Mercado Livre: ${extractedVal}`);
+        return extractedVal;
+      }
+    }
+  } catch (err) {
+    console.warn(`  ⚠️ Não foi possível extrair o link pela barra de afiliados: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return null;
+}
+
+/**
  * Converte o termo de busca em uma URL limpa nativa do Mercado Livre
  */
+
 function toMLSearchUrl(query: string): string {
   const queryLower = query.toLowerCase().trim();
   const dealCampaignTerms = [
@@ -384,6 +591,21 @@ export async function collectOffers(
   const allOffers: MLOffer[] = [];
   const history = loadSentHistory();
 
+  const priorityCats = config.filters.priorityCategories || [];
+  const usePriorityOnly = config.filters.usePriorityOnly === true;
+
+  let activeQueries: string[] = [];
+  if (usePriorityOnly && priorityCats.length > 0) {
+    activeQueries = priorityCats;
+    console.log(`\n🎯 [MODO FOCADO ATIVO] Minerando exclusivamente nas ${priorityCats.length} categorias/subcategorias prioritárias na ordem configurada (1 a 10)...`);
+  } else if (priorityCats.length > 0) {
+    const remaining = queries.filter((q) => !priorityCats.includes(q));
+    activeQueries = [...priorityCats, ...remaining];
+    console.log(`\n🚀 [MODO AMPLO COM PRIORIDADE] Iniciando varredura com ${priorityCats.length} categorias prioritárias seguidas por mais ${remaining.length} categorias do catálogo...`);
+  } else {
+    activeQueries = queries;
+  }
+
   console.log(`\n📚 Histórico carregado: ${history.size} registros de envios anteriores (produtos não serão repetidos).`);
 
   let sharedBrowser: Browser | null = null;
@@ -394,24 +616,36 @@ export async function collectOffers(
     if (isContextValid(sharedContext) && sharedPage && !sharedPage.isClosed()) {
       return sharedPage;
     }
-    if (sharedContext) {
-      await sharedContext.close().catch(() => {});
-      sharedContext = null;
-      sharedBrowser = null;
-      sharedPage = null;
-    }
 
-    const res = await openBrowser();
+    const res = await getOrCreateMLContext();
     sharedBrowser = res.browser;
     sharedContext = res.context;
-    sharedPage = sharedContext.pages().length > 0 ? sharedContext.pages()[0] : await sharedContext.newPage();
+
+    const pages = sharedContext.pages().filter(p => !p.isClosed());
+    if (pages.length > 0) {
+      sharedPage = pages[0];
+      for (let i = 1; i < pages.length; i++) {
+        if (pages[i].url() === 'about:blank') {
+          await pages[i].close().catch(() => {});
+        }
+      }
+    } else {
+      sharedPage = await sharedContext.newPage();
+    }
     return sharedPage;
   }
 
   try {
-    for (let i = 0; i < queries.length; i++) {
-      const query = queries[i];
-      console.log(`\n🔍 Buscando: "${query}"...`);
+    const firstPage = await ensurePage();
+    const loggedIn = await isMLLoggedIn(firstPage);
+    if (!loggedIn) {
+      console.error('\n  🔴 MINERAÇÃO CANCELADA: A conta do Mercado Livre não está logada no navegador!');
+      throw new Error("⚠️ LOGIN NO MERCADO LIVRE NÃO DETECTADO! Acesse a aba '🔑 Conexões & Logins Locais' no painel e clique em '🟡 Conectar / Logar Mercado Livre' para autenticar sua conta antes de iniciar a mineração de ofertas.");
+    }
+
+    for (let i = 0; i < activeQueries.length; i++) {
+      const query = activeQueries[i];
+      console.log(`\n🔍 Buscando (Usuário Logado - Prioridade ${i + 1}): "${query}"...`);
 
       try {
         const page = await ensurePage();
@@ -435,22 +669,24 @@ export async function collectOffers(
         }
       }
 
-      if (i < queries.length - 1) {
+      if (i < activeQueries.length - 1) {
         await new Promise((r) => setTimeout(r, 1200));
       }
     }
   } catch (err) {
     console.error('[ML] Erro no ciclo de coleta de ofertas:', err);
   } finally {
-    const curPage = sharedPage as Page | null;
-    const curContext = sharedContext as BrowserContext | null;
-    if (curPage && !curPage.isClosed()) {
-      await curPage.close().catch(() => {});
-    }
-    if (curContext && isContextValid(curContext)) {
-      await curContext.close().catch(() => {});
+    const curCtx = sharedContext as BrowserContext | null;
+    if (curCtx && curCtx !== activeMLContext && isContextValid(curCtx)) {
+      const curPage = sharedPage as Page | null;
+      if (curPage && !curPage.isClosed()) {
+        await curPage.close().catch(() => {});
+      }
+      await curCtx.close().catch(() => {});
     }
   }
+
+
 
   const filtered = allOffers
     .filter((offer) => offer.currentPrice >= config.filters.minPrice && offer.currentPrice <= config.filters.maxPrice)
@@ -469,8 +705,40 @@ export async function collectOffers(
   const sorted = deduplicated.sort((a, b) => (b.discountPercent || 0) - (a.discountPercent || 0));
   const finalOffers = sorted.slice(0, config.filters.maxResults);
 
-  console.log(`\n📊 Resumo do Coletor ML: ${allOffers.length} brutas ➔ ${filtered.length} após filtros ➔ ${finalOffers.length} melhores ofertas finalizadas.`);
-  return finalOffers;
+  // Para cada oferta final selecionada, aciona a barra de afiliados logada para obter o link meli.la oficial
+  const verifiedOffers: MLOffer[] = [];
+  if (finalOffers.length > 0) {
+    console.log(`\n🔗 Verificando e extraindo links de afiliado oficiais (meli.la) para ${finalOffers.length} oferta(s)...`);
+    try {
+      const page = await getOrCreateMLContext().then((res) => (res.context.pages().length > 0 ? res.context.pages()[0] : res.context.newPage()));
+      for (const offer of finalOffers) {
+        let shortLink = await fetchOfficialAffiliateShortLink(page, offer.permalink);
+        if (!shortLink) {
+          // Fallback para conversão canônica oficial com matt_tool do Mercado Livre
+          shortLink = convertToOfficialMLAffiliateLink(offer.permalink, config);
+        }
+        if (
+          shortLink &&
+          (shortLink.includes('meli.la/') ||
+            shortLink.includes('mercadolivre.com/sec/') ||
+            shortLink.includes('mliv.re/') ||
+            shortLink.includes('matt_tool='))
+        ) {
+          offer.affiliateLink = shortLink;
+          verifiedOffers.push(offer);
+          console.log(`  ✅ [COMISSÃO CONFIRMADA] "${offer.title}" ➔ Link Afiliado: ${shortLink}`);
+        } else {
+          console.warn(`  🚫 [SEM COMISSÃO DESCARTADO] "${offer.title}" descartado pois NÃO gerou link de afiliado na barra oficial ML.`);
+        }
+      }
+    } catch (shortErr) {
+      console.warn('  ⚠️ Erro ao extrair links da barra de afiliados:', shortErr);
+    }
+  }
+
+  console.log(`\n📊 Resumo do Coletor ML: ${allOffers.length} brutas ➔ ${filtered.length} após filtros ➔ ${verifiedOffers.length} ofertas com COMISSÃO DE AFILIADOS CONFIRMADA.`);
+  return verifiedOffers;
 }
+
 
 

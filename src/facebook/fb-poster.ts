@@ -5,6 +5,7 @@ import type { AffiliateOffer } from '../affiliate/link-converter.js';
 import { formatFacebookOffer, formatFacebookWaComment } from '../formatter/facebook.js';
 import { findBrowserPath, isCloudEnvironment } from '../config/browser.js';
 import { getDbPool } from '../db/index.js';
+import { dismissNativeWindowsFileDialogs } from '../utils/win-dialog-dismiss.js';
 
 const FB_PROFILE_DIR = join(process.cwd(), '.fb-profile');
 const TEMP_IMG_DIR = join(process.cwd(), '.fb-temp-images');
@@ -141,13 +142,16 @@ export async function openFacebookBrowser(): Promise<BrowserContext> {
     };
   });
 
-  // Interceptor global: cancela automaticamente qualquer janela nativa Explorer do SO
-  context.on('page', (p) => {
+  // Interceptor global: cancela automaticamente qualquer janela nativa Explorer do SO em TODAS as páginas
+  const registerFileChooserInterceptor = (p: Page) => {
     p.on('filechooser', async (fc) => {
-      console.log('[FB] 🛡️ Interceptado FileChooser do SO no Facebook. Fechando janela nativa automaticamente...');
+      console.log('[FB] 🛡️ Interceptado FileChooser do SO no Facebook. Fechando/cancelando janela nativa automaticamente...');
       await fc.setFiles([]).catch(() => {});
     });
-  });
+  };
+
+  context.pages().forEach(registerFileChooserInterceptor);
+  context.on('page', registerFileChooserInterceptor);
 
   // Restaura cookies da sessão do Neon DB
   await restoreFbCookiesFromDb(context);
@@ -216,8 +220,354 @@ function cleanTempImages(): void {
   } catch { /* ignore */ }
 }
 
+import type { Locator } from 'playwright-core';
+
+function normalizeFbText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Identifica com 100% de precisão o card de publicação que o próprio usuário acabou de criar no grupo.
+ * NUNCA permite que comentários sejam aplicados em postagens de terceiros no feed.
+ */
+async function findNewlyCreatedPostArticle(page: Page, offer: AffiliateOffer): Promise<Locator | null> {
+  await randomDelay(2000, 3500);
+
+  const offerTitle = offer.title || '';
+  const offerLink = offer.affiliateLink || offer.permalink || '';
+
+  // 1. TENTA NAVEGAR/ISOLAR VIA TOAST DE CONFIRMAÇÃO DO FACEBOOK ("Ver publicação" / "View post")
+  try {
+    const toastLink = page.locator('a[href*="/posts/"], a[href*="/permalink/"], a:has-text("Ver publicação"), a:has-text("View post")').first();
+    if (await toastLink.isVisible({ timeout: 2000 })) {
+      const href = await toastLink.getAttribute('href').catch(() => null);
+      if (href && href.includes('/posts/')) {
+        console.log(`  🎯 [1º COMENTÁRIO] Navegando diretamente para a URL da postagem criada: ${href}`);
+        await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        await randomDelay(2000, 3000);
+        const singlePostArticle = page.locator('[role="article"]').first();
+        if (await singlePostArticle.isVisible({ timeout: 3000 })) {
+          return singlePostArticle;
+        }
+      }
+    }
+  } catch {}
+
+  // 2. SELEÇÃO EXCLUSIVA DE CARDS DE POSTAGENS PRINCIPAIS DO FEED (DESCARTA SUB-COMENTÁRIOS DE OUTROS MEMBROS)
+  // Utiliza seletores que englobam o post inteiro no feed, descartando threads de comentários internos
+  const topFeedUnitSelectors = [
+    'div[data-pagelet*="FeedUnit"]',
+    'div[role="feed"] > div:has([role="article"])',
+    'div[role="main"] div[role="article"]:not([role="article"] [role="article"])',
+  ];
+
+  let topUnits: Locator | null = null;
+  let count = 0;
+
+  for (const sel of topFeedUnitSelectors) {
+    try {
+      const loc = page.locator(sel);
+      const c = await loc.count().catch(() => 0);
+      if (c > 0) {
+        topUnits = loc;
+        count = c;
+        break;
+      }
+    } catch {}
+  }
+
+  if (!topUnits || count === 0) {
+    topUnits = page.locator('[role="article"]:not([role="article"] [role="article"])');
+    count = await topUnits.count().catch(() => 0);
+  }
+
+  if (count === 0) return null;
+
+  const normalizedTitle = normalizeFbText(offerTitle);
+  const titleWords = normalizedTitle
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !['com', 'para', 'sem', 'por', 'dos', 'das', 'que', 'promo', 'oferta'].includes(w));
+
+  // TIER 1: Match por LINK DE AFILIADO / PERMALINK DA OFERTA (100% Único da postagem do usuário!)
+  if (offerLink && offerLink.length > 8) {
+    const cleanLink = offerLink.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+    const linkSnippet = cleanLink.split('?')[0];
+
+    for (let i = 0; i < Math.min(count, 5); i++) {
+      const unit = topUnits.nth(i);
+      try {
+        const text = await unit.innerText().catch(() => '');
+        const html = await unit.innerHTML().catch(() => '');
+        if (text.includes(offerLink) || text.includes(linkSnippet) || html.includes(linkSnippet)) {
+          console.log(`  🎯 [1º COMENTÁRIO] Card de post do próprio usuário isolado pelo Link de Afiliado!`);
+          return unit;
+        }
+      } catch {}
+    }
+  }
+
+  // TIER 2: Match por PALAVRAS DO TÍTULO DA OFERTA (sem acentos)
+  if (titleWords.length > 0) {
+    for (let i = 0; i < Math.min(count, 4); i++) {
+      const unit = topUnits.nth(i);
+      try {
+        const text = normalizeFbText(await unit.innerText().catch(() => ''));
+        const matchingWords = titleWords.filter((w) => text.includes(w));
+        if (matchingWords.length >= Math.min(2, titleWords.length)) {
+          console.log(`  🎯 [1º COMENTÁRIO] Card de post do próprio usuário isolado por Palavras do Título (${matchingWords.join(', ')})!`);
+          return unit;
+        }
+      } catch {}
+    }
+  }
+
+  // TIER 3: Match por SELOS RECENTES ("Você acabou de publicar", "Agora mesmo", "Just now", "1 min")
+  const recentBadges = [
+    'você acabou de publicar',
+    'voce acabou de publicar',
+    'agora mesmo',
+    'just now',
+    'sua publicação',
+    'your post',
+    'just published',
+    '1 min',
+    '1m',
+  ];
+
+  for (let i = 0; i < Math.min(count, 4); i++) {
+    const unit = topUnits.nth(i);
+    try {
+      const text = normalizeFbText(await unit.innerText().catch(() => ''));
+      for (const badge of recentBadges) {
+        if (text.includes(badge)) {
+          console.log(`  🎯 [1º COMENTÁRIO] Card de post do próprio usuário isolado pelo selo recente ("${badge}")!`);
+          return unit;
+        }
+      }
+    } catch {}
+  }
+
+  // TIER 4: O PRIMEIRO CARD DO TOPO DO FEED DO GRUPO (O post que o robô ACABOU de criar fica no topo do feed!)
+  console.log('  🎯 [1º COMENTÁRIO] Selecionando o card no topo do feed do grupo!');
+  for (let i = 0; i < Math.min(count, 3); i++) {
+    const unit = topUnits.nth(i);
+    try {
+      const text = normalizeFbText(await unit.innerText().catch(() => ''));
+      const isPinned = text.includes('em destaque') || text.includes('featured') || text.includes('fixado') || text.includes('pinned');
+      if (!isPinned) {
+        return unit;
+      }
+    } catch {}
+  }
+
+  return topUnits.first();
+}
+
+/**
+ * Detecta com alta precisão se a página do Facebook é de conteúdo indisponível, grupo deletado ou acesso negado.
+ * Retorna true se a página contiver os textos ou seletores da tela "This content isn't available right now".
+ */
+export async function checkIsFacebookPageUnavailable(page: Page): Promise<boolean> {
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const isUnavailable = await page.evaluate(() => {
+        const text = (document.body?.innerText || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+        const triggers = [
+          "content isn't available",
+          "content is not available",
+          "conteudo nao esta disponivel",
+          "conteudo nao disponivel",
+          "pagina nao esta disponivel",
+          "pagina nao disponivel",
+          "page not found",
+          "pagina nao encontrada",
+          "when this happens, it's usually because",
+          "quando isso acontece, geralmente",
+          "visit help center",
+          "central de ajuda",
+          "go to feed",
+          "ir para o feed",
+          "ir ao feed",
+          "shared it with a small group",
+          "compartilhou o conteudo apenas com",
+        ];
+
+        for (const trigger of triggers) {
+          if (text.includes(trigger)) return true;
+        }
+
+        // Checagem visual por botões da tela de erro
+        const linksAndButtons = Array.from(document.querySelectorAll('a, button, [role="button"]'));
+        for (const el of linksAndButtons) {
+          const btnText = (el.textContent || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          if (
+            btnText === 'go to feed' ||
+            btnText === 'ir para o feed' ||
+            btnText === 'visit help center' ||
+            btnText === 'visitar central de ajuda' ||
+            btnText === 'go back' ||
+            btnText === 'voltar'
+          ) {
+            return true;
+          }
+        }
+
+        return false;
+      }).catch(() => false);
+
+      if (isUnavailable) return true;
+      await new Promise((r) => setTimeout(r, 600));
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Detecta e trata modais de "Participation review" / "Regras do grupo" / "Perguntas de adesão".
+ * 1. Tenta marcar caixas de aceite de regras ("I agree to the group rules", "Concordo com as regras")
+ * 2. Clica em "Submit" / "Enviar" se habilitado
+ * 3. Se o modal persistir ou exigir respostas de texto manuais, fecha o modal (X, ESC, Close) para desbloquear a tela e permite que o grupo seja pulado.
+ */
+export async function handleFacebookGroupRulesModal(page: Page): Promise<{ modalDetected: boolean; skipped: boolean }> {
+  try {
+    const dialogs = page.locator('div[role="dialog"]');
+    const count = await dialogs.count();
+    if (count === 0) return { modalDetected: false, skipped: false };
+
+    let isRulesModal = false;
+    let targetDialog = null;
+
+    for (let i = 0; i < count; i++) {
+      const dialog = dialogs.nth(i);
+      const text = (await dialog.innerText().catch(() => '')).toLowerCase();
+      if (
+        text.includes('participation review') ||
+        text.includes('group rules') ||
+        text.includes('regras do grupo') ||
+        text.includes('análise de participação') ||
+        text.includes('perguntas de adesão') ||
+        text.includes('i agree to the group rules') ||
+        text.includes('concordo com as regras')
+      ) {
+        isRulesModal = true;
+        targetDialog = dialog;
+        break;
+      }
+    }
+
+    if (!isRulesModal || !targetDialog) {
+      return { modalDetected: false, skipped: false };
+    }
+
+    console.log('  ⚠️ [REGRAS] Detectado modal de regras do grupo ("Participation review"). Processando liberação...');
+
+    // A) Marca caixas de seleção (checkboxes) de regras do grupo
+    const checkboxes = targetDialog.locator('input[type="checkbox"], div[role="checkbox"], [aria-checked]');
+    const cbCount = await checkboxes.count();
+    for (let c = 0; c < cbCount; c++) {
+      try {
+        const cb = checkboxes.nth(c);
+        const isChecked = (await cb.isChecked().catch(() => false)) || (await cb.getAttribute('aria-checked')) === 'true';
+        if (!isChecked && (await cb.isVisible().catch(() => false))) {
+          await cb.click({ force: true }).catch(() => {});
+          await randomDelay(300, 600);
+        }
+      } catch { /* próximo */ }
+    }
+
+    // Marca especificamente elementos com rótulo "agree" / "concordo"
+    const agreeLabels = targetDialog.locator('label, span, div').filter({ hasText: /agree|concordo/i });
+    const labelCount = await agreeLabels.count();
+    for (let l = 0; l < Math.min(labelCount, 3); l++) {
+      try {
+        const label = agreeLabels.nth(l);
+        if (await label.isVisible().catch(() => false)) {
+          await label.click({ force: true }).catch(() => {});
+          await randomDelay(300, 500);
+        }
+      } catch { /* próximo */ }
+    }
+
+    await randomDelay(800, 1500);
+
+    // B) Clica no botão "Submit" / "Enviar" / "Concluir"
+    const submitSelectors = [
+      '[aria-label="Submit"]',
+      '[aria-label="Enviar"]',
+      '[aria-label="Concluir"]',
+      '[role="button"]:has-text("Submit")',
+      '[role="button"]:has-text("Enviar")',
+      '[role="button"]:has-text("Concluir")',
+      'button:has-text("Submit")',
+      'button:has-text("Enviar")',
+    ];
+
+    for (const sel of submitSelectors) {
+      try {
+        const btn = targetDialog.locator(sel).first();
+        if ((await btn.isVisible({ timeout: 1500 })) && (await btn.isEnabled().catch(() => true))) {
+          await btn.click({ force: true }).catch(() => {});
+          console.log('  ✅ [REGRAS] Termos do grupo aceitos e enviados via Submit!');
+          await randomDelay(2000, 3000);
+          break;
+        }
+      } catch { /* próximo */ }
+    }
+
+    // C) Se o modal continua visível (ex: exige respostas manuais digitadas), descarta o modal para não travar
+    const modalStillVisible = await targetDialog.isVisible({ timeout: 1500 }).catch(() => false);
+
+    if (modalStillVisible) {
+      console.log('  ℹ️ [REGRAS] O grupo exige respostas manuais ou aprovação. Descartando modal e pulando grupo...');
+
+      const closeSelectors = [
+        '[aria-label="Fechar"]',
+        '[aria-label="Close"]',
+        '[aria-label="Cancelar"]',
+        '[aria-label="Cancel"]',
+        'div[aria-label="Fechar"]',
+        'div[aria-label="Close"]',
+        'button:has-text("Cancelar")',
+        'button:has-text("Cancel")',
+      ];
+
+      let closed = false;
+      for (const cSel of closeSelectors) {
+        try {
+          const closeBtn = targetDialog.locator(cSel).first();
+          if (await closeBtn.isVisible({ timeout: 1000 })) {
+            await closeBtn.click({ force: true }).catch(() => {});
+            closed = true;
+            await randomDelay(800, 1200);
+            break;
+          }
+        } catch { /* próximo */ }
+      }
+
+      if (!closed) {
+        await page.keyboard.press('Escape').catch(() => {});
+        await randomDelay(800, 1200);
+      }
+
+      return { modalDetected: true, skipped: true };
+    }
+
+    return { modalDetected: true, skipped: false };
+  } catch {
+    return { modalDetected: false, skipped: false };
+  }
+}
+
 /**
  * Posta uma oferta em um grupo do Facebook.
+
  *
  * Fluxo:
  * 1. Navega para a URL do grupo
@@ -234,10 +584,33 @@ async function postToFacebookGroup(
   waGroupLink?: string
 ): Promise<boolean> {
   try {
-    console.log(`  📘 Navegando para grupo: ${groupUrl}`);
-
     await page.goto(groupUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await randomDelay(3000, 5000);
+
+    // 0. CHECAGEM AVANÇADA DE GRUPO INDISPONÍVEL / DELETADO / SEM ACESSO ("This content isn't available right now")
+    const isUnavailable = await checkIsFacebookPageUnavailable(page);
+    if (isUnavailable) {
+      console.warn(`  ⚠️ [FACEBOOK] Grupo indisponível ou deletado (${groupUrl}). Purgando do .env e redirecionando janela...`);
+      removeInvalidGroupUrlFromEnv(groupUrl);
+      await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
+      return false;
+    }
+
+    // Checagem complementar de texto da página
+    const pageBodyText = (await page.innerText('body').catch(() => '')).toLowerCase();
+
+    // Checagem de Restrição / Bloqueio Temporário da Conta
+    if (
+      pageBodyText.includes("temporarily blocked") ||
+      pageBodyText.includes("temporariamente bloqueado") ||
+      pageBodyText.includes("sua conta esta restric") ||
+      pageBodyText.includes("sua conta está restrita") ||
+      pageBodyText.includes("action blocked")
+    ) {
+      console.error(`  🚨 [FACEBOOK ALERTA] Conta temporariamente bloqueada ou restrita pelo Facebook. Pausando envio neste ciclo.`);
+      await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
+      return false;
+    }
 
     // 0. TRATAMENTO DE LINKS DE COMPARTILHAMENTO (share/g/) E REDIRECIONAMENTOS
     if (page.url().includes('/share/') || page.url().includes('share/g') || groupUrl.includes('share/g')) {
@@ -294,6 +667,15 @@ async function postToFacebookGroup(
       }
     } catch { /* sem popup */ }
 
+    // Trata modais de regras / participação no grupo ("Participation review")
+    const rulesCheck = await handleFacebookGroupRulesModal(page);
+    if (rulesCheck.skipped) {
+      console.warn(`  🗑️ [PURGA DE REGRAS] Grupo ${groupUrl} expurgado por exigir respostas manuais de adesão.`);
+      removeInvalidGroupUrlFromEnv(groupUrl, 'Exige respostas manuais de adesão');
+      await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
+      return false;
+    }
+
     // Clica no campo de criar publicação
     // O Facebook tem vários seletores possíveis para o campo de publicação (texto ou ícone de foto do feed)
     const createPostSelectors = [
@@ -335,41 +717,25 @@ async function postToFacebookGroup(
     }
 
     if (!clicked) {
-      console.log(`  ⚠️ Não conseguiu abrir campo de publicação no grupo. Pulando...`);
+      console.warn(`  🗑️ [PURGA DE INEFICIÊNCIA] Grupo "${groupUrl}" expurgado por não permitir abertura do campo de publicação.`);
+      removeInvalidGroupUrlFromEnv(groupUrl, 'Campo de publicação não abre ou bloqueado');
+      await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
       return false;
     }
 
     await randomDelay(2000, 4000);
 
     // 1. UPLOAD DA IMAGEM DO PRODUTO EM 1º LUGAR (Anexa a foto ANTES de colar o texto com os links)
-    // Isso garante que o post entre no modo Mídia/Foto e a foto do produto do Mercado Livre seja o destaque principal.
+    // Isso garante que o post entice no modo Mídia/Foto e a foto do produto do Mercado Livre seja o destaque principal.
     // IMPORTANTE: NUNCA chama btn.click() sem interceptar o 'filechooser', para NUNCA abrir a janela nativa do Windows Explorer ("Abrir").
     let photoUploaded = false;
     if (offer.thumbnail && offer.thumbnail.startsWith('http')) {
       const imgPath = await downloadImageToTemp(offer.thumbnail, offerIndex);
       if (imgPath) {
         try {
-          // A) Clica no botão "Foto/vídeo" dentro do modal para expandir a área de upload de mídia no Facebook
-          const photoButtonSelectors = [
-            'div[role="dialog"] [aria-label*="Foto/vídeo"]',
-            'div[role="dialog"] [aria-label*="Photo/video"]',
-            'div[role="dialog"] [aria-label*="foto"]',
-            'div[role="dialog"] [aria-label*="photo"]',
-            'div[role="dialog"] div:has-text("Foto/vídeo")',
-          ];
+          await dismissNativeWindowsFileDialogs();
 
-          for (const btnSel of photoButtonSelectors) {
-            try {
-              const btn = page.locator(btnSel).first();
-              if (await btn.isVisible({ timeout: 2000 })) {
-                await btn.click().catch(() => {});
-                await randomDelay(800, 1500);
-                break;
-              }
-            } catch { /* próximo */ }
-          }
-
-          // B) Injeta o arquivo diretamente no input[type=file] expandido do modal via Playwright CDP (SEM JANELA NATIVA DO SO)
+          // A) Injeta o arquivo diretamente nos inputs de arquivo já existentes no modal (sem clicar em botões)
           const fileInputs = [
             'div[role="dialog"] input[type="file"]',
             'input[type="file"][accept*="image"]',
@@ -379,14 +745,63 @@ async function postToFacebookGroup(
           for (const sel of fileInputs) {
             try {
               const fileInput = page.locator(sel).first();
-              if (await fileInput.count() > 0) {
+              if ((await fileInput.count()) > 0) {
                 await fileInput.setInputFiles(imgPath);
                 photoUploaded = true;
-                console.log(`  📸 Foto do produto carregada via DOM no modal (${sel})!`);
+                console.log(`  📸 Foto do produto carregada via DOM no modal expandido (${sel})!`);
                 break;
               }
             } catch { /* próximo */ }
           }
+
+          // B) Se não havia input de arquivo visível, expande a área "Foto/vídeo" interceptando o evento FileChooser via CDP
+          if (!photoUploaded) {
+            const photoButtonSelectors = [
+              'div[role="dialog"] [aria-label*="Foto/vídeo"]',
+              'div[role="dialog"] [aria-label*="Photo/video"]',
+              'div[role="dialog"] [aria-label*="foto"]',
+              'div[role="dialog"] [aria-label*="photo"]',
+              'div[role="dialog"] div:has-text("Foto/vídeo")',
+            ];
+
+            for (const btnSel of photoButtonSelectors) {
+              try {
+                const btn = page.locator(btnSel).first();
+                if (await btn.isVisible({ timeout: 2000 })) {
+                  // Envolve o clique no evento filechooser para evitar que o Chromium abra a janela nativa do SO
+                  const [fileChooser] = await Promise.all([
+                    page.waitForEvent('filechooser', { timeout: 3000 }).catch(() => null),
+                    btn.click().catch(() => {}),
+                  ]);
+
+                  if (fileChooser) {
+                    await fileChooser.setFiles(imgPath).catch(() => {});
+                    photoUploaded = true;
+                    console.log(`  📸 Foto do produto inserida via interceptador FileChooser no botão (${btnSel})!`);
+                  }
+                  await randomDelay(800, 1500);
+                  break;
+                }
+              } catch { /* próximo */ }
+            }
+          }
+
+          // C) Fallback: tenta novamente preencher input[type=file] expandido
+          if (!photoUploaded) {
+            for (const sel of fileInputs) {
+              try {
+                const fileInput = page.locator(sel).first();
+                if (await fileInput.count() > 0) {
+                  await fileInput.setInputFiles(imgPath);
+                  photoUploaded = true;
+                  console.log(`  📸 Foto do produto carregada via DOM no modal expandido (${sel})!`);
+                  break;
+                }
+              } catch { /* próximo */ }
+            }
+          }
+
+          await dismissNativeWindowsFileDialogs();
 
           if (photoUploaded) {
             console.log('  ⏳ Aguardando renderização e upload da foto na CDN do Facebook (5s)...');
@@ -432,7 +847,9 @@ async function postToFacebookGroup(
     }
 
     if (!textbox) {
-      console.log(`  ⚠️ Campo de texto não encontrado. Pulando grupo...`);
+      console.warn(`  🗑️ [PURGA DE INEFICIÊNCIA] Grupo "${groupUrl}" expurgado por ausência de campo de texto.`);
+      removeInvalidGroupUrlFromEnv(groupUrl, 'Campo de texto da publicação não encontrado');
+      await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
       return false;
     }
 
@@ -521,7 +938,9 @@ async function postToFacebookGroup(
     }
 
     if (!published) {
-      console.log(`  ⚠️ Botão "Publicar" não encontrado. Post pode não ter sido enviado.`);
+      console.warn(`  🗑️ [PURGA DE INEFICIÊNCIA] Grupo "${groupUrl}" expurgado por falha ao acionar o botão Publicar.`);
+      removeInvalidGroupUrlFromEnv(groupUrl, 'Falha ao acionar botão Publicar');
+      await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
       return false;
     }
 
@@ -534,193 +953,178 @@ async function postToFacebookGroup(
       await randomDelay(3000, 5000);
 
       // Verificação de post pendente para aprovação dos moderadores do grupo
-      const pendingApproval = page.locator('text="aprovação", text="pendente", text="pending approval"');
-      if (await pendingApproval.isVisible({ timeout: 1500 }).catch(() => false)) {
-        console.log('  ℹ️ O post foi enviado para a fila de aprovação dos administradores do grupo. (Comentário será adicionado após aprovação)');
+      const pendingApprovalSelectors = [
+        'text="aprovação"',
+        'text="pendente"',
+        'text="pending approval"',
+        'text="Submit for admin approval"',
+        'text="enviada para análise"',
+        'text="análise dos administradores"',
+        'text="análise de administradores"',
+        'text="análise de moderadores"',
+        'text="análise do administrador"',
+        '[aria-label*="aprovação"]',
+        '[aria-label*="approval"]',
+      ];
+      let isPending = false;
+      for (const pSel of pendingApprovalSelectors) {
+        try {
+          const pEl = page.locator(pSel).first();
+          if (await pEl.isVisible({ timeout: 1200 }).catch(() => false)) {
+            isPending = true;
+            break;
+          }
+        } catch {}
+      }
+
+      if (isPending) {
+        console.warn(`  🗑️ [PURGA DE APROVAÇÃO] Grupo "${groupUrl}" expurgado por exigir aprovação prévia de administradores/moderadores.`);
+        removeInvalidGroupUrlFromEnv(groupUrl, 'Exige aprovação prévia de administradores');
+        await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
+        return false;
+      }
+
+      // Localiza com isolamento estrito o artigo da publicação criada pelo próprio usuário
+      const targetArticle = await findNewlyCreatedPostArticle(page, offer);
+
+      if (!targetArticle) {
+        console.log('  ⚠️ Postagem recém-criada não pôde ser isolada no feed. Comentário suprimido para segurança.');
         return true;
       }
 
-      // Título ou trecho da oferta para identificar o post exato no feed
-      const titleKeywords = offer.title.split(' ').slice(0, 3).join(' ');
-      const titleSnippet = offer.title.substring(0, 18);
+      console.log(`  🎯 Postagem do próprio usuário isolada! Inserindo 1º comentário com link do WhatsApp...`);
 
-      // Filtra artigos no feed do Grupo que contenham o título ou pega o post do topo do feed
-      let targetArticle = page.locator('div[role="feed"] div[role="article"], div[data-pagelet*="FeedUnit"], div[role="main"] div[role="article"], [role="article"]').filter({ hasText: titleSnippet }).first();
-      let foundMyPost = await targetArticle.isVisible({ timeout: 3000 }).catch(() => false);
-
-      if (!foundMyPost) {
-        targetArticle = page.locator('div[role="feed"] div[role="article"], div[data-pagelet*="FeedUnit"], div[role="main"] div[role="article"], [role="article"]').filter({ hasText: titleKeywords }).first();
-        foundMyPost = await targetArticle.isVisible({ timeout: 3000 }).catch(() => false);
+      // Clica no botão "Comentar" para focar/abrir o campo de entrada do comentário DENTRO do artigo do usuário
+      const openCommentSelectors = [
+        '[aria-label*="Comentar"]',
+        '[aria-label*="Comment"]',
+        '[aria-label*="comentá"]',
+        '[aria-label*="Deixar um comentário"]',
+        '[aria-label*="Write a comment"]',
+        'div[role="button"]:has-text("Comentar")',
+        'div[role="button"]:has-text("Comment")',
+        'div[role="button"]:has-text("comentá")',
+        'button:has-text("Comentar")',
+        'button:has-text("Comment")',
+      ];
+      for (const sel of openCommentSelectors) {
+        try {
+          const openComment = targetArticle.locator(sel).first();
+          if (await openComment.isVisible({ timeout: 1200 })) {
+            await openComment.scrollIntoViewIfNeeded().catch(() => {});
+            await openComment.click({ force: true });
+            await randomDelay(800, 1500);
+            break;
+          }
+        } catch { /* tenta o próximo seletor */ }
       }
 
-      // Fallback 1: seleciona o 1º elemento de post no topo do feed do grupo recém-postado
-      if (!foundMyPost) {
-        targetArticle = page.locator('div[role="feed"] [role="article"], div[data-pagelet*="FeedUnit"], div[role="main"] [role="article"], div[role="feed"] > div, [role="article"]').first();
-        foundMyPost = await targetArticle.isVisible({ timeout: 2000 }).catch(() => false);
+      // Busca o campo de comentário ESPECIFICAMENTE dentro do artigo isolado do usuário
+      const commentBoxSelectors = [
+        'div[contenteditable="true"][aria-label*="Comment as"]',
+        'div[contenteditable="true"][aria-label*="Comentar como"]',
+        'div[contenteditable="true"][aria-label*="comentá"]',
+        'div[contenteditable="true"][aria-label*="Comentar"]',
+        'div[contenteditable="true"][aria-label*="Escreva"]',
+        'div[contenteditable="true"][aria-label*="comment"]',
+        'div[contenteditable="true"][aria-label*="Comment"]',
+        'div[contenteditable="true"][role="textbox"]',
+        'div[contenteditable="true"]',
+        '[role="textbox"][contenteditable="true"]',
+        'form [contenteditable="true"]',
+        '[role="textbox"]',
+      ];
+
+      let commentBox = null;
+      for (const sel of commentBoxSelectors) {
+        try {
+          const el = targetArticle.locator(sel).first();
+          if (await el.isVisible({ timeout: 1500 })) {
+            commentBox = el;
+            break;
+          }
+        } catch { /* próximo */ }
       }
 
-      // Fallback 2: usa a página inteira caso a estrutura do DOM não isole o post num artigo separado
-      if (!foundMyPost) {
-        console.log('  ℹ️ Artigo específico não isolado, usando contexto amplo da página...');
-        targetArticle = page.locator('div[role="feed"], div[role="main"], body').first();
-        foundMyPost = true;
+      // TRAVA DE SEGURANÇA: Se a caixa de comentário não existir estritamente dentro da postagem do próprio usuário, expurga o grupo por ineficiência
+      if (!commentBox) {
+        console.warn(`  🗑️ [PURGA DE COMENTÁRIO] Grupo "${groupUrl}" expurgado por não permitir comentários de membros.`);
+        removeInvalidGroupUrlFromEnv(groupUrl, 'Caixa de comentário desativada/bloqueada para membros');
+        await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
+        return false;
       }
 
-      if (foundMyPost) {
-        console.log(`  🎯 Postagem identificada! Inserindo 1º comentário com link do WhatsApp...`);
+      await commentBox.scrollIntoViewIfNeeded().catch(() => {});
+      await commentBox.click({ force: true }).catch(() => {});
+      await randomDelay(800, 1200);
 
-        // Clica no botão "Comentar" para focar/abrir o campo de entrada do comentário
-        const openCommentSelectors = [
-          '[aria-label*="Comentar"]',
-          '[aria-label*="Comment"]',
-          '[aria-label*="comentá"]',
-          '[aria-label*="Deixar um comentário"]',
-          '[aria-label*="Write a comment"]',
-          'div[role="button"]:has-text("Comentar")',
-          'div[role="button"]:has-text("Comment")',
-          'div[role="button"]:has-text("comentá")',
+      const waCommentText = formatFacebookWaComment(waGroupLink);
+
+      // Limpa a caixa de comentário antes de inserir
+      await commentBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
+      await randomDelay(300, 500);
+
+      // 1. Injeta texto usando Clipboard
+      let textInserted = false;
+      try {
+        await page.evaluate((text) => {
+          return navigator.clipboard.writeText(text);
+        }, waCommentText);
+        await page.keyboard.press('Control+v');
+        await randomDelay(800, 1200);
+
+        const insertedText = (await commentBox.textContent().catch(() => '')) || '';
+        if (insertedText && (insertedText.includes('http') || insertedText.includes('chat.whatsapp.com') || insertedText.length > 10)) {
+          textInserted = true;
+        }
+      } catch { textInserted = false; }
+
+      // 2. FALLBACK DIRETO VIA insertText: Injeta todo o bloco de texto multilinha de uma só vez
+      if (!textInserted) {
+        console.log('  📝 Inserindo texto da chamada do WhatsApp via API insertText...');
+        await commentBox.focus().catch(() => {});
+        await page.keyboard.insertText(waCommentText);
+        await randomDelay(1000, 1500);
+      }
+
+      // Pressiona Enter para enviar o comentário e aguarda a confirmação
+      await page.keyboard.press('Enter');
+      await randomDelay(3500, 5000);
+
+      let articleText = await targetArticle.innerText().catch(() => '');
+      const waLinkCheck = waGroupLink || 'chat.whatsapp.com';
+      let commentConfirmed = articleText.includes('chat.whatsapp.com') || (waGroupLink && articleText.includes(waGroupLink));
+
+      // Se o Enter não enviou, clica no botão "Enviar" / "Comentar" DENTRO do artigo do usuário
+      if (!commentConfirmed) {
+        const sendCommentSelectors = [
+          '[aria-label*="Enviar comentário"]',
+          '[aria-label*="Send comment"]',
+          '[aria-label*="Enviar"]',
+          '[aria-label*="Send"]',
+          '[aria-label*="Publicar"]',
           'button:has-text("Comentar")',
           'button:has-text("Comment")',
+          'div[role="button"]:has-text("Comentar")',
+          'div[role="button"]:has-text("Comment")',
+          'form [role="button"][tabindex="0"]',
         ];
-        for (const sel of openCommentSelectors) {
-          try {
-            const openComment = targetArticle.locator(sel).first();
-            if (await openComment.isVisible({ timeout: 1200 })) {
-              await openComment.scrollIntoViewIfNeeded().catch(() => {});
-              await openComment.click({ force: true });
-              await randomDelay(800, 1500);
-              break;
-            }
-          } catch { /* tenta o próximo seletor */ }
-        }
-
-        // Busca o campo de comentário ESPECIFICAMENTE dentro da postagem ou globalmente
-        const commentBoxSelectors = [
-          'div[contenteditable="true"][aria-label*="Comment as"]',
-          'div[contenteditable="true"][aria-label*="Comentar como"]',
-          'div[contenteditable="true"][aria-label*="comentá"]',
-          'div[contenteditable="true"][aria-label*="Comentar"]',
-          'div[contenteditable="true"][aria-label*="Escreva"]',
-          'div[contenteditable="true"][aria-label*="comment"]',
-          'div[contenteditable="true"][aria-label*="Comment"]',
-          'div[contenteditable="true"][role="textbox"]',
-          'div[contenteditable="true"]',
-          '[role="textbox"][contenteditable="true"]',
-          'form [contenteditable="true"]',
-          '[role="textbox"]',
-        ];
-
-        let commentBox = null;
-        for (const sel of commentBoxSelectors) {
-          try {
-            const el = targetArticle.locator(sel).first();
-            if (await el.isVisible({ timeout: 1500 })) {
-              commentBox = el;
-              break;
-            }
-          } catch { /* próximo */ }
-        }
-
-        // Se ainda não encontrou na sub-árvore, procura no feed global
-        if (!commentBox) {
-          for (const sel of commentBoxSelectors) {
-            try {
-              const globalEl = page.locator(sel).first();
-              if (await globalEl.isVisible({ timeout: 1500 })) {
-                commentBox = globalEl;
-                break;
-              }
-            } catch { /* próximo */ }
+        for (const sel of sendCommentSelectors) {
+          const sendButton = targetArticle.locator(sel).last();
+          if (await sendButton.isVisible({ timeout: 1200 }).catch(() => false)) {
+            await sendButton.click({ force: true });
+            await randomDelay(3000, 4500);
+            break;
           }
         }
+        articleText = await targetArticle.innerText().catch(() => '');
+        commentConfirmed = articleText.includes('chat.whatsapp.com') || (waGroupLink && articleText.includes(waGroupLink));
+      }
 
-        if (commentBox) {
-          await commentBox.scrollIntoViewIfNeeded().catch(() => {});
-          await commentBox.click({ force: true }).catch(() => {});
-          await randomDelay(800, 1200);
-
-          const waCommentText = formatFacebookWaComment(waGroupLink);
-
-          // Limpa a caixa de comentário antes de inserir
-          await page.keyboard.press('Control+A').catch(() => {});
-          await page.keyboard.press('Backspace').catch(() => {});
-          await randomDelay(300, 600);
-
-          // 1. TENTA COLAR VIA CLIPBOARD (Control+V): Preserva todo o texto multilinha de uma só vez sem disparar Enter prematuro
-          let textInserted = false;
-          try {
-            await page.evaluate((text) => {
-              return navigator.clipboard.writeText(text);
-            }, waCommentText);
-            await page.keyboard.press('Control+v');
-            await randomDelay(1000, 1500);
-
-            const insertedText = (await commentBox.textContent().catch(() => '')) || '';
-            if (insertedText && (insertedText.includes('http') || insertedText.includes('chat.whatsapp.com') || insertedText.length > 10)) {
-              textInserted = true;
-            }
-          } catch { textInserted = false; }
-
-          // 2. FALLBACK SE CLIPBOARD FALHAR: Digita o texto linha a linha usando Shift+Enter para quebras de linha (NÃO Enter puro)
-          if (!textInserted) {
-            console.log('  ⚠️ Digitando chamada do WhatsApp com Shift+Enter para evitar envio prematuro...');
-            const lines = waCommentText.split('\n');
-            for (let idx = 0; idx < lines.length; idx++) {
-              await page.keyboard.type(lines[idx], { delay: 15 });
-              if (idx < lines.length - 1) {
-                await page.keyboard.press('Shift+Enter');
-                await randomDelay(100, 200);
-              }
-            }
-            await randomDelay(1000, 1500);
-          }
-
-          // Pressiona Enter para enviar o comentário e aguarda a confirmação
-          await page.keyboard.press('Enter');
-          await randomDelay(3500, 5000);
-
-          let articleText = await targetArticle.innerText().catch(() => '');
-          let pageText = await page.evaluate(() => document.body.innerText).catch(() => '');
-          const waLinkCheck = waGroupLink || 'chat.whatsapp.com';
-          let commentConfirmed = articleText.includes('chat.whatsapp.com') || pageText.includes('chat.whatsapp.com') || (waGroupLink && (articleText.includes(waGroupLink) || pageText.includes(waGroupLink)));
-
-          // Se o Enter não enviou, clica no botão "Enviar" / "Comentar" (ícone de avião de papel ou botão azul)
-          if (!commentConfirmed) {
-            const sendCommentSelectors = [
-              '[aria-label*="Enviar comentário"]',
-              '[aria-label*="Send comment"]',
-              '[aria-label*="Enviar"]',
-              '[aria-label*="Send"]',
-              '[aria-label*="Publicar"]',
-              'button:has-text("Comentar")',
-              'button:has-text("Comment")',
-              'div[role="button"]:has-text("Comentar")',
-              'div[role="button"]:has-text("Comment")',
-              'form [role="button"][tabindex="0"]',
-            ];
-            for (const sel of sendCommentSelectors) {
-              const sendButton = targetArticle.locator(sel).last();
-              if (await sendButton.isVisible({ timeout: 1200 }).catch(() => false)) {
-                await sendButton.click({ force: true });
-                await randomDelay(3000, 4500);
-                break;
-              }
-            }
-            articleText = await targetArticle.innerText().catch(() => '');
-            pageText = await page.evaluate(() => document.body.innerText).catch(() => '');
-            commentConfirmed = articleText.includes('chat.whatsapp.com') || pageText.includes('chat.whatsapp.com') || (waGroupLink && (articleText.includes(waGroupLink) || pageText.includes(waGroupLink)));
-          }
-
-          if (commentConfirmed) {
-            console.log('  ✅ 1º Comentário com link do grupo VIP do WhatsApp confirmado na publicação!');
-          } else {
-            console.log('  ℹ️ Comentário enviado para a publicação do Facebook.');
-          }
-        } else {
-          console.log('  ℹ️ Campo de comentário não encontrado dentro da postagem da oferta.');
-        }
+      if (commentConfirmed) {
+        console.log('  ✅ 1º Comentário com link do grupo VIP do WhatsApp confirmado na publicação do próprio usuário!');
       } else {
-        console.log('  ⚠️ Não foi possível isolar o post próprio no feed.');
+        console.log('  ℹ️ 1º Comentário enviado para a publicação do próprio usuário no Facebook.');
       }
     } catch (commentErr) {
       console.log(`  ⚠️ Aviso ao enviar comentário: ${commentErr}`);
@@ -832,8 +1236,22 @@ export async function postOffersToFacebookGroups(
       return { success: 0, failed: 0 };
     }
 
-    const groupsToPostFinal = groupUrls.slice(0, maxGroupsPerCycle);
-    console.log(`\n📘 Facebook: Postando em ${groupsToPostFinal.length} grupo(s)...`);
+    // Fila Circular de Grupos: lê o último índice e avança em lotes ágeis (padrão: 15 grupos)
+    let lastIndex = parseInt(process.env.FB_LAST_GROUP_INDEX || '0', 10);
+    if (isNaN(lastIndex) || lastIndex < 0 || lastIndex >= groupUrls.length) {
+      lastIndex = 0;
+    }
+
+    const batchSize = Math.min(maxGroupsPerCycle > 0 ? maxGroupsPerCycle : 15, groupUrls.length);
+    const groupsToPostFinal: string[] = [];
+
+    for (let i = 0; i < batchSize; i++) {
+      const idx = (lastIndex + i) % groupUrls.length;
+      groupsToPostFinal.push(groupUrls[idx]);
+    }
+
+    const nextIndex = (lastIndex + batchSize) % groupUrls.length;
+    console.log(`\n📘 Facebook: Postando em lote ágil de ${groupsToPostFinal.length} grupo(s) (Fila circular: grupos ${lastIndex + 1} até ${lastIndex + groupsToPostFinal.length} de ${groupUrls.length})...`);
 
     // Posta em cada grupo — uma oferta diferente por grupo (rotação)
     for (let i = 0; i < groupsToPostFinal.length; i++) {
@@ -856,6 +1274,22 @@ export async function postOffersToFacebookGroups(
         await randomDelay(delaySec * 1000, (delaySec + 30) * 1000);
       }
     }
+
+    // Salva o próximo ponteiro circular no .env para o próximo ciclo dar continuidade
+    try {
+      const envFile = join(process.cwd(), '.env');
+      if (existsSync(envFile)) {
+        let envContent = readFileSync(envFile, 'utf-8');
+        if (envContent.includes('FB_LAST_GROUP_INDEX=')) {
+          envContent = envContent.replace(/^FB_LAST_GROUP_INDEX=.*$/m, `FB_LAST_GROUP_INDEX=${nextIndex}`);
+        } else {
+          envContent += `\nFB_LAST_GROUP_INDEX=${nextIndex}`;
+        }
+        writeFileSync(envFile, envContent, 'utf-8');
+        process.env.FB_LAST_GROUP_INDEX = String(nextIndex);
+        console.log(`  📍 [FILA CIRCULAR] Ponteiro de grupos atualizado para o grupo #${nextIndex + 1} no próximo ciclo.`);
+      }
+    } catch {}
   } catch (error) {
     console.error('  ❌ Erro geral na automação do Facebook:', error);
   } finally {
@@ -877,7 +1311,6 @@ export async function postOffersToFacebookGroups(
 /**
  * Escaneia a página de grupos do perfil (https://www.facebook.com/groups/joins/)
  * e sincroniza TODOS os grupos dos quais o perfil participa diretamente no arquivo .env
- * Atualiza tanto FB_GROUP_URLS quanto FB_MAX_GROUPS_PER_CYCLE com o total de grupos encontrados.
  */
 export async function syncJoinedFacebookGroups(page: Page): Promise<{ totalGroups: number; updated: boolean }> {
   console.log('  🔄 [SYNC] Escaneando todos os grupos que seu perfil do Facebook faz parte...');
@@ -958,19 +1391,10 @@ export async function syncJoinedFacebookGroups(page: Page): Promise<{ totalGroup
       content += `\nFB_GROUP_URLS=${updatedGroupUrlsStr}`;
     }
 
-    // Atualiza FB_MAX_GROUPS_PER_CYCLE para igualar ao total de grupos encontrados
-    const maxMatch = content.match(/^FB_MAX_GROUPS_PER_CYCLE=(\d+)$/m);
-    if (maxMatch) {
-      content = content.replace(/^FB_MAX_GROUPS_PER_CYCLE=.*$/m, `FB_MAX_GROUPS_PER_CYCLE=${totalGroupsCount}`);
-    } else {
-      content += `\nFB_MAX_GROUPS_PER_CYCLE=${totalGroupsCount}`;
-    }
-
     writeFileSync(envFile, content, 'utf-8');
 
     // Atualiza variáveis em memória
     process.env.FB_GROUP_URLS = updatedGroupUrlsStr;
-    process.env.FB_MAX_GROUPS_PER_CYCLE = String(totalGroupsCount);
 
     console.log(`\n✅ [SYNC] SUCESSO! GRUPOS DO SEU PERFIL SINCRONIZADOS NO .ENV:`);
     console.log(`  📊 Total de Grupos Encontrados: ${totalGroupsCount}`);
@@ -1024,6 +1448,52 @@ export function replaceGroupUrlInEnv(oldUrl: string, cleanCanonicalUrl: string):
       console.log(`  ✨ URL do grupo resolvida e atualizada no .env: ${cleanCanonicalUrl}`);
     }
   } catch { /* ignora */ }
+}
+
+/**
+ * Remove a URL de um grupo que está quebrado, deletado, ineficiente ou exige aprovação de administradores do arquivo .env e DB.
+ */
+export function removeInvalidGroupUrlFromEnv(groupUrl: string, reason?: string): void {
+  try {
+    const envFile = join(process.cwd(), '.env');
+    if (!existsSync(envFile)) return;
+
+    let content = readFileSync(envFile, 'utf-8');
+    const groupUrlsMatch = content.match(/^FB_GROUP_URLS=(.*)$/m);
+    if (!groupUrlsMatch || !groupUrlsMatch[1].trim()) return;
+
+    const currentUrls = groupUrlsMatch[1].split(',').map((u) => u.trim()).filter(Boolean);
+    const targetMatch = groupUrl.match(/facebook\.com\/groups\/([^\/?#]+)/i);
+    const targetSlug = targetMatch && targetMatch[1] ? targetMatch[1].toLowerCase() : groupUrl.toLowerCase();
+
+    const updatedUrls = currentUrls.filter((u) => {
+      const uClean = u.toLowerCase();
+      return !uClean.includes(targetSlug);
+    });
+
+    if (updatedUrls.length < currentUrls.length) {
+      const updatedStr = updatedUrls.join(',');
+      content = content.replace(/^FB_GROUP_URLS=.*$/m, `FB_GROUP_URLS=${updatedStr}`);
+
+      writeFileSync(envFile, content, 'utf-8');
+      process.env.FB_GROUP_URLS = updatedStr;
+
+      // Sincroniza a remoção no banco Neon DB se disponível
+      const db = getDbPool();
+      if (db) {
+        db.query(
+          `INSERT INTO app_settings (key, value) VALUES ('FB_GROUP_URLS', $1)
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+          [updatedStr]
+        ).catch(() => {});
+      }
+
+      console.log(`  🗑️ [PURGA DE GRUPO] ${reason || 'Grupo ineficiente'} expurgado do .env e Neon DB: ${groupUrl}`);
+      console.log(`  📊 Grupos eficientes restantes: ${updatedUrls.length}`);
+    }
+  } catch (err) {
+    console.error('  ⚠️ Erro ao remover grupo do .env:', err);
+  }
 }
 
 /**
@@ -1171,14 +1641,8 @@ export async function autoDiscoverAndJoinFacebookGroups(
       console.log(`  ✅ Solicitação de participação enviada para ${joinedCount} novo(s) grupo(s)!`);
       await randomDelay(3000, 5000);
 
-      // Tenta fechar/enviar popups de perguntas de entrada se surgirem
-      try {
-        const submitQuestionsBtn = page.locator('[aria-label="Enviar"], [aria-label="Submit"], [aria-label="Concluir"], [role="button"]:has-text("Enviar"), [role="button"]:has-text("Concluir")');
-        if (await submitQuestionsBtn.first().isVisible({ timeout: 3000 })) {
-          await submitQuestionsBtn.first().click();
-          await randomDelay(2000, 3000);
-        }
-      } catch { /* sem modal de perguntas */ }
+      // Trata modais de regras/perguntas de entrada se surgirem
+      await handleFacebookGroupRulesModal(page);
 
       // Extrai os links dos grupos para salvar no .env
       const groupLinksOnPage = await page.evaluate(() => {
