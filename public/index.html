@@ -1403,6 +1403,7 @@
       }
 
       renderCascadeTree(inputTreeSearch.value);
+      saveAllConfig();
     }
 
     function toggleSingleCategory(catId, isChecked) {
@@ -1412,11 +1413,13 @@
         selectedCategories = selectedCategories.filter(id => id !== catId);
       }
       renderCascadeTree(inputTreeSearch.value);
+      saveAllConfig();
     }
 
     function removeSingleCategory(catId) {
       selectedCategories = selectedCategories.filter(id => id !== catId);
       renderCascadeTree(inputTreeSearch.value);
+      saveAllConfig();
     }
 
     inputTreeSearch.addEventListener('input', (e) => {
@@ -1430,6 +1433,7 @@
     btnUnselectAll.addEventListener('click', () => {
       selectedCategories = [];
       renderCascadeTree(inputTreeSearch.value);
+      saveAllConfig();
       log('🔲 Todas as subcategorias foram desmarcadas.');
       showToast('Seleção limpa!', 'warning');
     });
@@ -1440,6 +1444,7 @@
       if (!selectedCategories.includes(val)) {
         selectedCategories.push(val);
         renderCascadeTree(inputTreeSearch.value);
+        saveAllConfig();
         log(`➕ Subnicho customizado "${val}" adicionado.`);
         showToast(`Subnicho "${val}" adicionado!`, 'success');
       }

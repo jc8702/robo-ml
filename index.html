@@ -3,96 +3,116 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ML Ofertas Bot — Árvore Completa de Categorias & Subcategorias</title>
+  <title>ML Ofertas Bot — Painel de Controle de Ofertas e Automação 24/7</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-dark: #0f172a;
-      --bg-card: rgba(30, 41, 59, 0.7);
-      --border-card: rgba(255, 255, 255, 0.1);
+      --bg-dark: #090d16;
+      --bg-card: rgba(17, 24, 39, 0.75);
+      --bg-card-hover: rgba(31, 41, 55, 0.85);
+      --border-card: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(59, 130, 246, 0.3);
       --ml-yellow: #ffe600;
-      --ml-blue: #2d3277;
       --wa-green: #25d366;
+      --fb-blue: #1877f2;
       --accent-blue: #3b82f6;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
+      --accent-indigo: #6366f1;
+      --accent-cyan: #06b6d4;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
       --danger: #ef4444;
+      --success: #10b981;
+      --warning: #f59e0b;
     }
 
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Outfit', 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
 
     body {
       background-color: var(--bg-dark);
       background-image: 
-        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(37, 211, 102, 0.12) 0px, transparent 50%);
+        radial-gradient(at 10% 10%, rgba(59, 130, 246, 0.18) 0px, transparent 40%),
+        radial-gradient(at 90% 90%, rgba(37, 211, 102, 0.14) 0px, transparent 40%),
+        radial-gradient(at 50% 50%, rgba(99, 102, 241, 0.08) 0px, transparent 60%);
       color: var(--text-main);
       min-height: 100vh;
-      padding: 2rem;
+      padding: 1.5rem;
     }
 
     .container {
-      max-width: 1240px;
+      max-width: 1280px;
       margin: 0 auto;
     }
 
+    /* HEADER */
     header {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 2rem;
-      padding-bottom: 1.5rem;
-      border-bottom: 1px solid var(--border-card);
+      gap: 1.25rem;
+      margin-bottom: 1.75rem;
+      padding: 1.25rem 1.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 20px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 1rem;
     }
 
     .brand-icon {
-      font-size: 2rem;
+      font-size: 2.2rem;
       background: linear-gradient(135deg, var(--ml-yellow), #f59e0b);
-      border-radius: 12px;
-      padding: 0.5rem 0.75rem;
+      border-radius: 16px;
+      padding: 0.5rem 0.85rem;
+      box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
     }
 
     .brand h1 {
-      font-size: 1.5rem;
-      font-weight: 800;
-      background: linear-gradient(to right, #ffffff, #cbd5e1);
+      font-size: 1.6rem;
+      font-weight: 900;
+      background: linear-gradient(to right, #ffffff, #93c5fd);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
     }
 
     .brand p {
       font-size: 0.85rem;
       color: var(--text-muted);
+      font-weight: 400;
     }
 
     .status-bar {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      gap: 1rem;
+      gap: 0.75rem;
     }
 
     .status-badge {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      background: var(--bg-card);
+      background: rgba(15, 23, 42, 0.7);
       border: 1px solid var(--border-card);
       padding: 0.5rem 1rem;
       border-radius: 9999px;
-      font-size: 0.875rem;
+      font-size: 0.85rem;
       font-weight: 600;
       backdrop-filter: blur(12px);
     }
@@ -103,73 +123,160 @@
       border-radius: 50%;
       background-color: var(--danger);
       box-shadow: 0 0 10px var(--danger);
+      transition: all 0.3s ease;
     }
 
     .status-dot.active {
-      background-color: var(--wa-green);
-      box-shadow: 0 0 10px var(--wa-green);
+      background-color: var(--success);
+      box-shadow: 0 0 12px var(--success);
     }
 
+    /* BOTÕES FLUIDOS */
     .btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 0.5rem;
-      padding: 0.75rem 1.5rem;
-      border-radius: 10px;
-      font-weight: 600;
+      padding: 0.75rem 1.4rem;
+      border-radius: 12px;
+      font-weight: 700;
       font-size: 0.9rem;
       cursor: pointer;
       border: none;
-      transition: all 0.2s ease;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+      outline: none;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
     }
 
     .btn-primary {
-      background: linear-gradient(135deg, var(--wa-green), #16a34a);
+      background: linear-gradient(135deg, var(--wa-green), #15803d);
       color: #ffffff;
-      box-shadow: 0 4px 14px rgba(37, 211, 102, 0.3);
+      box-shadow: 0 4px 16px rgba(37, 211, 102, 0.35);
     }
 
     .btn-primary:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(37, 211, 102, 0.4);
+      box-shadow: 0 6px 24px rgba(37, 211, 102, 0.5);
     }
 
     .btn-secondary {
-      background: var(--bg-card);
+      background: rgba(30, 41, 59, 0.8);
       color: var(--text-main);
       border: 1px solid var(--border-card);
     }
 
     .btn-secondary:hover {
-      background: rgba(51, 65, 85, 0.8);
+      background: rgba(51, 65, 85, 0.9);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
     }
 
     .btn-warning {
-      background: linear-gradient(135deg, var(--ml-yellow), #eab308);
-      color: #0f172a;
-      font-weight: 700;
+      background: linear-gradient(135deg, var(--ml-yellow), #d97706);
+      color: #090d16;
+      font-weight: 800;
+      box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35);
     }
 
-    .card {
+    .btn-warning:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(245, 158, 11, 0.5);
+    }
+
+    .btn-fb {
+      background: linear-gradient(135deg, var(--fb-blue), #1d4ed8);
+      color: #ffffff;
+      box-shadow: 0 4px 16px rgba(24, 119, 242, 0.35);
+    }
+
+    .btn-fb:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(24, 119, 242, 0.5);
+    }
+
+    /* NAVEGAÇÃO POR ABAS */
+    .tabs-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-bottom: 1.5rem;
+      padding: 0.5rem;
       background: var(--bg-card);
       border: 1px solid var(--border-card);
       border-radius: 16px;
-      padding: 1.5rem;
       backdrop-filter: blur(12px);
+    }
+
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.25rem;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-btn.active {
+      color: #ffffff;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(99, 102, 241, 0.3));
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    }
+
+    /* CONTEÚDO DAS ABAS */
+    .tab-pane {
+      display: none;
+    }
+
+    .tab-pane.active {
+      display: block;
+      animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* CARDS */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 20px;
+      padding: 1.75rem;
+      backdrop-filter: blur(16px);
       margin-bottom: 1.5rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
     }
 
     .card-title {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      font-size: 1.1rem;
-      font-weight: 700;
-      margin-bottom: 1.25rem;
+      gap: 1rem;
+      font-size: 1.2rem;
+      font-weight: 800;
+      margin-bottom: 1.5rem;
       color: #ffffff;
     }
 
-    /* TREE CASCADE STYLES */
+    /* BUSCA E BARRA DE SELEÇÃO */
     .search-filter-box {
       margin-bottom: 1.25rem;
     }
@@ -178,81 +285,114 @@
       width: 100%;
       background: rgba(15, 23, 42, 0.8);
       border: 1px solid var(--border-card);
-      border-radius: 10px;
-      padding: 0.85rem 1.25rem;
+      border-radius: 12px;
+      padding: 0.9rem 1.25rem;
       color: #ffffff;
       font-size: 0.95rem;
       outline: none;
+      transition: all 0.2s;
     }
 
     .search-filter-box input:focus {
       border-color: var(--accent-blue);
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
     }
 
+    .selection-summary-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.85rem;
+      background: rgba(15, 23, 42, 0.7);
+      border-radius: 12px;
+      border: 1px solid var(--border-card);
+      min-height: 48px;
+      margin-bottom: 1.25rem;
+      align-items: center;
+    }
+
+    .active-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: linear-gradient(135deg, rgba(37, 211, 102, 0.25), rgba(59, 130, 246, 0.25));
+      border: 1px solid rgba(37, 211, 102, 0.5);
+      color: #ffffff;
+      padding: 0.3rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      animation: popIn 0.2s ease;
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.8); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .active-chip-remove {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-weight: bold;
+      margin-left: 2px;
+      transition: color 0.15s;
+    }
+
+    .active-chip-remove:hover {
+      color: var(--danger);
+    }
+
+    /* ÁRVORE DE CATEGORIAS */
     .cascade-tree {
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
-      margin-bottom: 1.5rem;
-      max-height: 560px;
+      gap: 0.85rem;
+      max-height: 540px;
       overflow-y: auto;
       padding-right: 0.5rem;
     }
 
-    /* Scrollbar estilizada */
-    .cascade-tree::-webkit-scrollbar {
-      width: 8px;
-    }
-    .cascade-tree::-webkit-scrollbar-track {
-      background: rgba(15, 23, 42, 0.4);
-      border-radius: 4px;
-    }
-    .cascade-tree::-webkit-scrollbar-thumb {
-      background: rgba(59, 130, 246, 0.4);
-      border-radius: 4px;
-    }
+    .cascade-tree::-webkit-scrollbar { width: 8px; }
+    .cascade-tree::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 4px; }
+    .cascade-tree::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.4); border-radius: 4px; }
 
     .parent-node {
-      flex-shrink: 0; /* IMPEDE A COMPRESSÃO VERTICAL DOS CARDS DA ÁRVORE */
-      background: rgba(15, 23, 42, 0.75);
+      flex-shrink: 0;
+      background: rgba(15, 23, 42, 0.8);
       border: 1px solid var(--border-card);
-      border-radius: 12px;
+      border-radius: 14px;
       overflow: hidden;
       transition: all 0.2s ease;
     }
 
     .parent-node:hover {
-      border-color: rgba(59, 130, 246, 0.5);
-      background: rgba(30, 41, 59, 0.8);
+      border-color: rgba(59, 130, 246, 0.4);
+      background: rgba(30, 41, 59, 0.85);
     }
 
     .parent-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 1rem 1.25rem;
-      min-height: 56px;
+      padding: 1.1rem 1.35rem;
       cursor: pointer;
       user-select: none;
-      background: rgba(30, 41, 59, 0.5);
+      background: rgba(30, 41, 59, 0.6);
     }
 
     .parent-left {
       display: flex;
       align-items: center;
       gap: 0.85rem;
-      font-weight: 600;
-      font-size: 0.95rem;
+      font-weight: 700;
+      font-size: 0.98rem;
       color: #ffffff;
     }
 
     .parent-toggle-icon {
       color: var(--text-muted);
-      transition: transform 0.2s ease;
+      transition: transform 0.25s ease;
       font-size: 0.85rem;
-      width: 16px;
-      text-align: center;
     }
 
     .parent-node.open .parent-toggle-icon {
@@ -261,23 +401,22 @@
     }
 
     .badge-count {
-      font-size: 0.78rem;
-      background: rgba(59, 130, 246, 0.2);
-      color: #60a5fa;
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      padding: 0.3rem 0.75rem;
+      font-size: 0.8rem;
+      background: rgba(59, 130, 246, 0.25);
+      color: #93c5fd;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      padding: 0.3rem 0.8rem;
       border-radius: 9999px;
-      font-weight: 600;
-      white-space: nowrap;
+      font-weight: 700;
     }
 
     .subcategories-list {
       display: none;
-      padding: 1rem 1.25rem 1.25rem 2.75rem;
+      padding: 1.1rem 1.35rem;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: 0.75rem;
       border-top: 1px solid var(--border-card);
-      background: rgba(15, 23, 42, 0.4);
+      background: rgba(15, 23, 42, 0.5);
     }
 
     .parent-node.open .subcategories-list {
@@ -287,131 +426,147 @@
     .sub-item {
       display: flex;
       align-items: center;
-      gap: 0.65rem;
-      font-size: 0.875rem;
+      gap: 0.75rem;
+      font-size: 0.88rem;
       color: var(--text-main);
       cursor: pointer;
-      padding: 0.5rem 0.75rem;
-      border-radius: 8px;
-      background: rgba(30, 41, 59, 0.4);
+      padding: 0.6rem 0.85rem;
+      border-radius: 10px;
+      background: rgba(30, 41, 59, 0.5);
       border: 1px solid transparent;
       transition: all 0.15s ease;
     }
 
     .sub-item:hover {
-      background: rgba(59, 130, 246, 0.15);
-      border-color: rgba(59, 130, 246, 0.3);
+      background: rgba(59, 130, 246, 0.2);
+      border-color: rgba(59, 130, 246, 0.4);
     }
 
     .sub-item input[type="checkbox"], .parent-header input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
+      width: 18px;
+      height: 18px;
       accent-color: var(--wa-green);
       cursor: pointer;
     }
 
-    /* Active Selection Summary Bar */
-    .selection-summary-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.4rem;
-      padding: 0.75rem;
-      background: rgba(15, 23, 42, 0.6);
-      border-radius: 10px;
-      border: 1px solid var(--border-card);
-      min-height: 44px;
-      margin-bottom: 1rem;
-      align-items: center;
-    }
-
-    .active-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      background: linear-gradient(135deg, rgba(37, 211, 102, 0.2), rgba(59, 130, 246, 0.2));
-      border: 1px solid var(--wa-green);
-      color: #ffffff;
-      padding: 0.25rem 0.65rem;
-      border-radius: 9999px;
-      font-size: 0.8rem;
-      font-weight: 500;
-    }
-
-    .active-chip-remove {
-      cursor: pointer;
-      color: var(--text-muted);
-      font-weight: bold;
-    }
-
-    .active-chip-remove:hover {
-      color: var(--danger);
-    }
-
-    /* Form Fields */
+    /* INPUTS DE FORMULÁRIO */
     .form-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-bottom: 1.25rem;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
     }
 
     .field {
       display: flex;
       flex-direction: column;
-      gap: 0.35rem;
+      gap: 0.45rem;
     }
 
     .field label {
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       color: var(--text-muted);
-      font-weight: 500;
+      font-weight: 600;
     }
 
-    input[type="text"], input[type="number"], select {
-      background: rgba(15, 23, 42, 0.6);
+    input[type="text"], input[type="number"], select, textarea {
+      background: rgba(15, 23, 42, 0.75);
       border: 1px solid var(--border-card);
-      border-radius: 8px;
-      padding: 0.75rem 1rem;
+      border-radius: 10px;
+      padding: 0.85rem 1.1rem;
       color: var(--text-main);
-      font-size: 0.9rem;
+      font-size: 0.92rem;
       outline: none;
+      transition: all 0.2s;
     }
 
-    input[type="text"]:focus, input[type="number"]:focus, select:focus {
+    input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
       border-color: var(--accent-blue);
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
     }
 
-    /* Offers Gallery */
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    /* TOGGLE SWITCH */
+    .switch-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: #ffffff;
+      user-select: none;
+    }
+
+    .switch-input {
+      display: none;
+    }
+
+    .switch-slider {
+      width: 48px;
+      height: 26px;
+      background-color: rgba(51, 65, 85, 0.8);
+      border-radius: 9999px;
+      position: relative;
+      transition: background-color 0.25s ease;
+      border: 1px solid var(--border-card);
+    }
+
+    .switch-slider::before {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background-color: #ffffff;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.25s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .switch-input:checked + .switch-slider {
+      background-color: var(--wa-green);
+    }
+
+    .switch-input:checked + .switch-slider::before {
+      transform: translateX(22px);
+    }
+
+    /* GALERIA DE OFERTAS */
     .offers-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-      gap: 1rem;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1.25rem;
     }
 
     .offer-card {
-      background: rgba(15, 23, 42, 0.6);
+      background: rgba(15, 23, 42, 0.8);
       border: 1px solid var(--border-card);
-      border-radius: 12px;
+      border-radius: 14px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      transition: transform 0.2s ease;
+      transition: all 0.25s ease;
     }
 
     .offer-card:hover {
       transform: translateY(-4px);
       border-color: rgba(59, 130, 246, 0.5);
+      box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6);
     }
 
     .offer-img-wrapper {
       position: relative;
-      height: 160px;
+      height: 180px;
       background: #ffffff;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 0.5rem;
+      padding: 0.75rem;
     }
 
     .offer-img {
@@ -422,18 +577,19 @@
 
     .discount-badge {
       position: absolute;
-      top: 8px;
-      right: 8px;
+      top: 10px;
+      right: 10px;
       background: var(--danger);
       color: #ffffff;
-      font-weight: 800;
-      font-size: 0.75rem;
-      padding: 0.25rem 0.5rem;
-      border-radius: 6px;
+      font-weight: 900;
+      font-size: 0.8rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(239, 68, 68, 0.4);
     }
 
     .offer-body {
-      padding: 1rem;
+      padding: 1.1rem;
       display: flex;
       flex-direction: column;
       flex: 1;
@@ -441,31 +597,32 @@
     }
 
     .offer-title {
-      font-size: 0.85rem;
-      font-weight: 600;
-      line-height: 1.3;
-      margin-bottom: 0.75rem;
+      font-size: 0.9rem;
+      font-weight: 700;
+      line-height: 1.35;
+      margin-bottom: 0.85rem;
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
+      color: #ffffff;
     }
 
     .offer-prices {
       display: flex;
       align-items: baseline;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
+      gap: 0.6rem;
+      margin-bottom: 0.85rem;
     }
 
     .price-current {
-      font-size: 1.1rem;
-      font-weight: 800;
+      font-size: 1.25rem;
+      font-weight: 900;
       color: var(--wa-green);
     }
 
     .price-old {
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       color: var(--text-muted);
       text-decoration: line-through;
     }
@@ -474,33 +631,63 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 0.75rem;
+      font-size: 0.78rem;
       color: var(--text-muted);
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
-      padding-top: 0.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 0.65rem;
     }
 
-    .seller-tag {
-      color: var(--ml-yellow);
-      font-weight: 600;
-    }
-
-    /* Console Activity Log */
+    /* CONSOLE DE LOGS */
     .console-box {
       background: #020617;
       border: 1px solid var(--border-card);
-      border-radius: 12px;
-      padding: 1rem;
-      font-family: monospace;
-      font-size: 0.8rem;
-      height: 140px;
+      border-radius: 14px;
+      padding: 1.1rem;
+      font-family: 'JetBrains Mono', monospace, sans-serif;
+      font-size: 0.83rem;
+      height: 180px;
       overflow-y: auto;
       color: #38bdf8;
-      line-height: 1.5;
+      line-height: 1.6;
     }
 
-    .log-line {
-      margin-bottom: 0.25rem;
+    .log-line { margin-bottom: 0.35rem; }
+
+    /* TOAST NOTIFICATION SYSTEM */
+    .toast-container {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .toast {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--border-card);
+      border-left: 4px solid var(--accent-blue);
+      padding: 1rem 1.35rem;
+      border-radius: 12px;
+      color: #ffffff;
+      font-size: 0.9rem;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      animation: slideIn 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .toast.success { border-left-color: var(--success); }
+    .toast.error { border-left-color: var(--danger); }
+    .toast.warning { border-left-color: var(--warning); }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
     }
   </style>
 </head>
@@ -508,13 +695,13 @@
 
   <div class="container">
     
-    <!-- HEADER -->
+    <!-- HEADER DA APLICAÇÃO -->
     <header>
       <div class="brand">
         <div class="brand-icon">🛒</div>
         <div>
-          <h1>ML Ofertas Bot</h1>
-          <p>Catálogo Completo de Categorias & Subcategorias Mercado Livre</p>
+          <h1>ML Ofertas Bot Pro</h1>
+          <p>Plataforma de Scraping, Afiliados e Disparo 24/7 (WhatsApp & Facebook)</p>
         </div>
       </div>
 
@@ -524,115 +711,340 @@
           <span id="statusText">Verificando...</span>
         </div>
 
-        <a href="https://robo-ml.onrender.com/qr" target="_blank" class="btn btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem;">📱 Status QR Code / Conexão ↗</a>
         <button class="btn btn-warning" id="btnRunNow">⚡ Enviar Ofertas Agora</button>
         <button class="btn btn-primary" id="btnToggleBot">▶️ Iniciar Automação</button>
       </div>
     </header>
 
-    <!-- CARD 1: SELETOR EM CASCATA COMPLETO -->
-    <div class="card">
-      <div class="card-title">
-        <span>🌳 Árvore Completa de Categorias & Subcategorias</span>
-        <div style="display: flex; gap: 0.5rem;">
-          <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" id="btnExpandAll">📂 Expandir Todas</button>
-          <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" id="btnUnselectAll">🔲 Limpar Seleção</button>
+    <!-- NAVEGAÇÃO POR ABAS -->
+    <div class="tabs-nav">
+      <button class="tab-btn active" data-tab="tab-sessions">🔑 Conexões & Logins Locais</button>
+      <button class="tab-btn" data-tab="tab-tree">🌳 Categorias & Subnichos</button>
+      <button class="tab-btn" data-tab="tab-filters">⚙️ Filtros & Agendamento</button>
+      <button class="tab-btn" data-tab="tab-facebook">📘 Automação Facebook</button>
+      <button class="tab-btn" data-tab="tab-instagram">📸 Automação Instagram</button>
+      <button class="tab-btn" data-tab="tab-history">📸 Ofertas Enviadas</button>
+    </div>
+
+    <!-- ABA 0: CONEXÕES & LOGINS LOCAIS -->
+    <div class="tab-pane active" id="tab-sessions">
+      <div class="card">
+        <div class="card-title">
+          <span>📱 Gerenciador de Sessões e Logins Locais (Navegador Chrome)</span>
+          <button class="btn btn-secondary" id="btnRefreshSessions" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;">🔄 Atualizar Status</button>
         </div>
-      </div>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.5;">
+          O robô opera 100% na sua máquina local. Conecte suas contas do <b>WhatsApp</b>, <b>Facebook</b> e <b>Instagram</b> clicando nos botões abaixo para abrir a janela do Chrome local e efetuar o login.
+        </p>
 
-      <!-- Filtro Rápido por Texto na Árvore -->
-      <div class="search-filter-box">
-        <input type="text" id="inputTreeSearch" placeholder="🔍 Filtrar subcategorias na tela (ex: iphone, whey, tv, notebook gamer...)...">
-      </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+          <!-- CARD WHATSAPP -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-card); border-radius: 16px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; font-weight: 800; font-size: 1.1rem; color: #ffffff;">
+                  <span style="font-size: 1.4rem;">💬</span> WhatsApp Web
+                </div>
+                <div class="status-badge" id="badgeWaSession">
+                  <div class="status-dot" id="dotWaSession"></div>
+                  <span id="textWaSession">Verificando...</span>
+                </div>
+              </div>
+              <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 1rem;">
+                Abre o Chrome no WhatsApp Web para escaneamento do QR Code ou pareamento via número.
+              </p>
+            </div>
+            <button class="btn btn-primary" id="btnConnectWa" style="width: 100%;">🟢 Conectar / Logar WhatsApp</button>
+          </div>
 
-      <!-- Resumo das Subcategorias Selecionadas -->
-      <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.35rem; font-weight: 500;">
-        Filtros Ativos para a Próxima Varredura:
-      </div>
-      <div class="selection-summary-bar" id="selectionSummary">
-        <!-- Chips ativos serão renderizados aqui -->
-      </div>
+          <!-- CARD FACEBOOK -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-card); border-radius: 16px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; font-weight: 800; font-size: 1.1rem; color: #ffffff;">
+                  <span style="font-size: 1.4rem;">📘</span> Facebook Groups
+                </div>
+                <div class="status-badge" id="badgeFbSession">
+                  <div class="status-dot" id="dotFbSession"></div>
+                  <span id="textFbSession">Verificando...</span>
+                </div>
+              </div>
+              <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 1rem;">
+                Abre o Chrome no Facebook para realizar o login e salvar cookies de sessão no seu perfil local.
+              </p>
+            </div>
+            <button class="btn btn-fb" id="btnConnectFb" style="width: 100%;">📘 Conectar / Logar Facebook</button>
+          </div>
 
-      <!-- ÁRVORE EM CASCATA DE CATEGORIAS E SUBCATEGORIAS COMPLETA -->
-      <div class="cascade-tree" id="cascadeTree">
-        <!-- Inserido dinamicamente via JS -->
-      </div>
-
-      <!-- INCLUIR TERMO DE NICHO CUSTOMIZADO -->
-      <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-card); display: flex; gap: 0.75rem; align-items: center;">
-        <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500; min-width: 140px;">➕ Adicionar Subnicho:</span>
-        <input type="text" id="inputCustomCategory" placeholder="Ex: iphone 16 pro max, placa rtx 4060, tênis olympikus..." style="flex: 1;">
-        <button class="btn btn-secondary" id="btnAddCustom">+ Incluir</button>
+          <!-- CARD INSTAGRAM -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-card); border-radius: 16px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; font-weight: 800; font-size: 1.1rem; color: #ffffff;">
+                  <span style="font-size: 1.4rem;">📸</span> Instagram Feed
+                </div>
+                <div class="status-badge" id="badgeIgSession">
+                  <div class="status-dot" id="dotIgSession"></div>
+                  <span id="textIgSession">Verificando...</span>
+                </div>
+              </div>
+              <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 1rem;">
+                Abre o Chrome no Instagram para efetuar login ou validar credenciais da conta.
+              </p>
+            </div>
+            <button class="btn btn-warning" id="btnConnectIg" style="width: 100%;">📸 Conectar / Logar Instagram</button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- CARD 2: FILTROS E CONFIGURAÇÃO -->
-    <div class="card">
-      <div class="card-title">
-        <span>⚙️ Filtros de Oferta & Agendamento</span>
-        <button class="btn btn-primary" style="padding: 0.45rem 1rem; font-size: 0.85rem;" id="btnSaveConfig">💾 Salvar Alterações</button>
-      </div>
-
-      <div class="form-grid">
-        <div class="field">
-          <label for="minPrice">Preço Mínimo (R$)</label>
-          <input type="number" id="minPrice" value="30">
+    <!-- ABA 1: ÁRVORE DE CATEGORIAS -->
+    <div class="tab-pane" id="tab-tree">
+      <div class="card">
+        <div class="card-title">
+          <span>🌳 Árvore Completa de Categorias & Subcategorias Mercado Livre</span>
+          <div style="display: flex; gap: 0.6rem;">
+            <button class="btn btn-secondary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnExpandAll">📂 Expandir Todas</button>
+            <button class="btn btn-secondary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnUnselectAll">🔲 Limpar Seleção</button>
+          </div>
         </div>
 
-        <div class="field">
-          <label for="maxPrice">Preço Máximo (R$)</label>
-          <input type="number" id="maxPrice" value="500">
+        <!-- Filtro Rápido de Texto -->
+        <div class="search-filter-box">
+          <input type="text" id="inputTreeSearch" placeholder="🔍 Filtrar subcategorias na tela (ex: iphone 16, whey, notebook gamer, smartwatch...)...">
         </div>
 
-        <div class="field">
-          <label for="minDiscount">Desconto Mínimo (%)</label>
-          <input type="number" id="minDiscount" value="10">
+        <!-- Resumo das Subcategorias Selecionadas -->
+        <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem; font-weight: 600;">
+          Filtros Ativos para a Próxima Varredura:
+        </div>
+        <div class="selection-summary-bar" id="selectionSummary">
+          <!-- Chips inseridos via JS -->
         </div>
 
-        <div class="field">
-          <label for="maxResults">Máximo de Ofertas por Envio</label>
-          <input type="number" id="maxResults" value="10">
+        <!-- Árvore Cascata -->
+        <div class="cascade-tree" id="cascadeTree">
+          <!-- Renderizado via JS -->
         </div>
 
-        <div class="field">
-          <label for="cronSchedule">Frequência de Envio</label>
-          <select id="cronSchedule">
-            <option value="0 */1 * * *">A cada 1 hora</option>
-            <option value="0 */2 * * *">A cada 2 horas</option>
-            <option value="0 */3 * * *" selected>A cada 3 horas (Padrão)</option>
-            <option value="0 9,13,18 * * *">3x ao dia (09h, 13h e 18h)</option>
-            <option value="*/15 * * * *">A cada 15 minutos (Teste Rápido)</option>
-          </select>
+        <!-- Incluir Subnicho Customizado -->
+        <div style="margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border-card); display: flex; gap: 0.75rem; align-items: center;">
+          <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 600; min-width: 150px;">➕ Adicionar Subnicho:</span>
+          <input type="text" id="inputCustomCategory" placeholder="Ex: iphone 16 pro max, placa rtx 4060, tênis olympikus..." style="flex: 1;">
+          <button class="btn btn-secondary" id="btnAddCustom">+ Incluir</button>
         </div>
       </div>
     </div>
 
-    <!-- CARD 3: GALERIA DE OFERTAS ENVIADAS -->
-    <div class="card">
-      <div class="card-title">
-        <span>📸 Histórico Recente de Ofertas Enviadas</span>
-        <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" id="btnRefreshHistory">🔄 Atualizar Galeria</button>
-      </div>
+    <!-- ABA 2: FILTROS E AGENDAMENTO -->
+    <div class="tab-pane" id="tab-filters">
+      <div class="card">
+        <div class="card-title">
+          <span>⚙️ Filtros de Oferta & Agendamento Cron</span>
+          <button class="btn btn-primary" id="btnSaveConfig">💾 Salvar Alterações no PostgreSQL</button>
+        </div>
 
-      <div class="offers-grid" id="offersGrid">
-        <!-- Cards de ofertas inseridos via JS -->
+        <div class="form-grid">
+          <div class="field" style="grid-column: span 2;">
+            <label for="affiliateId">ID de Afiliado Mercado Livre (TAG Oficial):</label>
+            <input type="text" id="affiliateId" placeholder="Ex: 52075002">
+          </div>
+
+          <div class="field">
+            <label for="groupName">Nome do Grupo Alvo no WhatsApp:</label>
+            <input type="text" id="groupName" placeholder="Ex: GC 19 GRUPO VIP SO MERCADO LIVRE">
+          </div>
+
+          <div class="field">
+            <label for="groupId">ID (JID) do Grupo WhatsApp (Opcional):</label>
+            <input type="text" id="groupId" placeholder="Ex: 120363428727908129@g.us">
+          </div>
+
+          <div class="field">
+            <label for="minPrice">Preço Mínimo (R$)</label>
+            <input type="number" id="minPrice" value="30">
+          </div>
+
+          <div class="field">
+            <label for="maxPrice">Preço Máximo (R$)</label>
+            <input type="number" id="maxPrice" value="10000">
+          </div>
+
+          <div class="field">
+            <label for="minDiscount">Desconto Mínimo (%)</label>
+            <input type="number" id="minDiscount" value="0">
+          </div>
+
+          <div class="field">
+            <label for="maxResults">Máximo de Ofertas por Envio</label>
+            <input type="number" id="maxResults" value="10">
+          </div>
+
+          <div class="field" style="grid-column: span 2;">
+            <label for="cronSchedule">Frequência de Envio Autônomo (Cron Schedule)</label>
+            <select id="cronSchedule">
+              <option value="0 */1 * * *">A cada 1 hora</option>
+              <option value="0 */2 * * *">A cada 2 horas</option>
+              <option value="0 */3 * * *" selected>A cada 3 horas (Recomendado)</option>
+              <option value="0 9,13,18 * * *">3x ao dia (09h, 13h e 18h)</option>
+              <option value="*/15 * * * *">A cada 15 minutos (Modo Teste Rápido)</option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- CARD 4: CONSOLE DE ATIVIDADE -->
+    <!-- ABA 3: AUTOMAÇÃO FACEBOOK -->
+    <div class="tab-pane" id="tab-facebook">
+      <div class="card">
+        <div class="card-title">
+          <span>📘 Postador de Grupos do Facebook</span>
+          <button class="btn btn-fb" id="btnSaveFbConfig">💾 Salvar Configurações do Facebook</button>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <label class="switch-label">
+            <input type="checkbox" id="fbEnabled" class="switch-input">
+            <span class="switch-slider"></span>
+            <span>Ativar Publicação Automática em Grupos do Facebook</span>
+          </label>
+        </div>
+
+        <div class="form-grid" style="margin-bottom: 1.5rem;">
+          <div class="field" style="grid-column: span 2;">
+            <label for="fbGroupUrls">URLs dos Grupos do Facebook (uma por linha ou separadas por vírgula):</label>
+            <textarea id="fbGroupUrls" placeholder="https://www.facebook.com/groups/ofertasmais&#10;https://www.facebook.com/groups/promocoesbrasil"></textarea>
+          </div>
+
+          <div class="field" style="grid-column: span 2;">
+            <label for="fbWaGroupLink">Link do Grupo do WhatsApp (Inserido nos comentários do Facebook):</label>
+            <input type="text" id="fbWaGroupLink" placeholder="https://chat.whatsapp.com/ExemploGrupo">
+          </div>
+
+          <div class="field">
+            <label for="fbMaxGroupsPerCycle">Máximo de Grupos por Ciclo</label>
+            <input type="number" id="fbMaxGroupsPerCycle" value="64">
+          </div>
+
+          <div class="field">
+            <label for="fbDelayBetweenPosts">Intervalo entre Postagens (Segundos)</label>
+            <input type="number" id="fbDelayBetweenPosts" value="60">
+          </div>
+        </div>
+
+        <div>
+          <label class="switch-label">
+            <input type="checkbox" id="fbAutoJoin" class="switch-input" checked>
+            <span class="switch-slider"></span>
+            <span>Participar automaticamente dos grupos caso não seja membro</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 4: AUTOMAÇÃO INSTAGRAM -->
+    <div class="tab-pane" id="tab-instagram">
+      <div class="card">
+        <div class="card-title">
+          <span>📸 Configurações da Automação de Alto Engajamento no Instagram</span>
+          <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+            <button class="btn btn-warning" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnTestIg">📸 Testar Postagem Instagram</button>
+            <button class="btn btn-secondary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnTestIgAutoDm">💬 Testar Auto-DM (Comentários)</button>
+            <button class="btn btn-primary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnSaveIgConfig">💾 Salvar Instagram</button>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <label class="switch-label">
+            <input type="checkbox" id="igEnabled" class="switch-input">
+            <span class="switch-slider"></span>
+            <span>Ativar Publicação Automática no Feed</span>
+          </label>
+
+          <label class="switch-label">
+            <input type="checkbox" id="igAutoDmEnabled" class="switch-input">
+            <span class="switch-slider"></span>
+            <span>🤖 Ativar Auto-DM por Comentário ("ManyChat" Local)</span>
+          </label>
+        </div>
+
+        <div class="form-grid" style="margin-bottom: 1.5rem;">
+          <div class="field">
+            <label for="igUsername">Nome de Usuário / Email do Instagram:</label>
+            <input type="text" id="igUsername" placeholder="clickmarido ou email@exemplo.com">
+          </div>
+
+          <div class="field">
+            <label for="igPassword">Senha do Instagram (Para Automação Direta na Nuvem):</label>
+            <input type="password" id="igPassword" placeholder="••••••••">
+          </div>
+
+          <div class="field">
+            <label for="igMaxPostsPerCycle">Máximo de Posts por Ciclo:</label>
+            <input type="number" id="igMaxPostsPerCycle" value="3">
+          </div>
+
+          <div class="field">
+            <label for="igTriggerWord">Palavra-Chave Gatilho (ex: PASSE, OFERTA, LINK):</label>
+            <input type="text" id="igTriggerWord" placeholder="PASSE">
+          </div>
+
+          <div class="field" style="grid-column: span 2;">
+            <label for="igDmTemplate">Template da Mensagem no Direct (DM):</label>
+            <input type="text" id="igDmTemplate" placeholder="Olá! Aqui está o seu link com desconto exclusivo para {title}: {link} 🎁">
+          </div>
+
+          <div class="field" style="grid-column: span 2;">
+            <label for="igBioLink">Link Promocional para CTA (Mencionado na Legenda como Link da Bio):</label>
+            <input type="text" id="igBioLink" placeholder="https://chat.whatsapp.com/SeuGrupoVIP ou linktr.ee/seuPerfil">
+          </div>
+
+          <div class="field" style="grid-column: span 2;">
+            <label for="igCustomHashtags">Hashtags Personalizadas para Engajamento Orgânico (Algoritmo da Meta):</label>
+            <input type="text" id="igCustomHashtags" placeholder="#achadinhos #ofertas #mercadolivre #desconto #promocao #achadosdosdia">
+          </div>
+        </div>
+
+        <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); padding: 1rem; border-radius: 10px; font-size: 0.85rem; color: #bae6fd;">
+          💡 <strong>Como Funciona a Automação de Comentários & Direct ("ManyChat"):</strong><br>
+          • As legendas incentivam o usuário a comentar a palavra-chave configurada (ex: <em>"PASSE"</em>).<br>
+          • O robô monitora os posts, identifica o comentário e envia uma mensagem privada no Direct (DM) com o link oficial de afiliado.<br>
+          • Além do Direct, o robô responde publicamente ao comentário do usuário, impulsionando o engajamento orgânico do post.
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 5: HISTÓRICO DE OFERTAS ENVIADAS -->
+    <div class="tab-pane" id="tab-history">
+      <div class="card">
+        <div class="card-title">
+          <span>📸 Histórico Recente de Ofertas Enviadas</span>
+          <button class="btn btn-secondary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnRefreshHistory">🔄 Atualizar Galeria</button>
+        </div>
+
+        <div class="offers-grid" id="offersGrid">
+          <!-- Inserido dinamicamente via JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD FIXO DE LOGS -->
     <div class="card">
       <div class="card-title">
-        📟 Console de Status
+        <span>📟 Console de Status e Atividade em Tempo Real</span>
       </div>
       <div class="console-box" id="consoleBox">
-        <div class="log-line">⚡ Painel carregado com catálogo completo do Mercado Livre.</div>
+        <div class="log-line">⚡ Painel carregado e conectado ao servidor.</div>
       </div>
     </div>
 
   </div>
 
+  <!-- CONTAINER DE TOASTS -->
+  <div class="toast-container" id="toastContainer"></div>
+
   <script>
-    // CATÁLOGO COMPLETO DAS CATEGORIAS & SUBCATEGORIAS/MARCAS MERCADO LIVRE
+    // CATÁLOGO DE CATEGORIAS E SUBCATEGORIAS
     const CASCADE_DATA = [
       {
         id: 'ofertas-destaque-ml',
@@ -837,7 +1249,7 @@
     let selectedCategories = [];
     let isRunning = false;
 
-    // DOM
+    // DOM ELEMENTS
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
     const btnToggleBot = document.getElementById('btnToggleBot');
@@ -850,9 +1262,28 @@
     const inputCustomCategory = document.getElementById('inputCustomCategory');
     const btnAddCustom = document.getElementById('btnAddCustom');
     const btnSaveConfig = document.getElementById('btnSaveConfig');
+    const btnSaveFbConfig = document.getElementById('btnSaveFbConfig');
     const btnRefreshHistory = document.getElementById('btnRefreshHistory');
     const offersGrid = document.getElementById('offersGrid');
     const consoleBox = document.getElementById('consoleBox');
+
+    // SISTEMA DE TOAST
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      
+      const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : '⚠️';
+      toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+      
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
 
     function log(msg) {
       const time = new Date().toLocaleTimeString('pt-BR');
@@ -863,7 +1294,19 @@
       consoleBox.scrollTop = consoleBox.scrollHeight;
     }
 
-    // Renderiza a Árvore Completa
+    // NAVEGAÇÃO DE ABAS
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+
+        btn.classList.add('active');
+        const targetTab = document.getElementById(btn.getAttribute('data-tab'));
+        if (targetTab) targetTab.classList.add('active');
+      });
+    });
+
+    // RENDERIZAÇÃO DA ÁRVORE CASCATA
     function renderCascadeTree(filterText = '') {
       cascadeTree.innerHTML = '';
       const filterLower = filterText.toLowerCase().trim();
@@ -885,7 +1328,6 @@
         const parentDiv = document.createElement('div');
         parentDiv.className = `parent-node ${filterLower ? 'open' : ''}`;
 
-        // Header
         const header = document.createElement('div');
         header.className = 'parent-header';
         header.innerHTML = `
@@ -901,7 +1343,6 @@
           parentDiv.classList.toggle('open');
         });
 
-        // Sublist
         const subList = document.createElement('div');
         subList.className = 'subcategories-list';
 
@@ -928,7 +1369,7 @@
       selectionSummary.innerHTML = '';
 
       if (selectedCategories.length === 0) {
-        selectionSummary.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">Nenhuma subcategoria selecionada. (Selecione acima para filtrar com precisão)</span>';
+        selectionSummary.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">Nenhuma subcategoria selecionada. (Selecione acima para varredura direcionada)</span>';
         return;
       }
 
@@ -962,7 +1403,7 @@
       }
 
       renderCascadeTree(inputTreeSearch.value);
-      saveConfigToServer();
+      saveAllConfig();
     }
 
     function toggleSingleCategory(catId, isChecked) {
@@ -972,13 +1413,13 @@
         selectedCategories = selectedCategories.filter(id => id !== catId);
       }
       renderCascadeTree(inputTreeSearch.value);
-      saveConfigToServer();
+      saveAllConfig();
     }
 
     function removeSingleCategory(catId) {
       selectedCategories = selectedCategories.filter(id => id !== catId);
       renderCascadeTree(inputTreeSearch.value);
-      saveConfigToServer();
+      saveAllConfig();
     }
 
     inputTreeSearch.addEventListener('input', (e) => {
@@ -992,8 +1433,9 @@
     btnUnselectAll.addEventListener('click', () => {
       selectedCategories = [];
       renderCascadeTree(inputTreeSearch.value);
-      saveConfigToServer();
+      saveAllConfig();
       log('🔲 Todas as subcategorias foram desmarcadas.');
+      showToast('Seleção limpa!', 'warning');
     });
 
     btnAddCustom.addEventListener('click', () => {
@@ -1002,41 +1444,110 @@
       if (!selectedCategories.includes(val)) {
         selectedCategories.push(val);
         renderCascadeTree(inputTreeSearch.value);
-        saveConfigToServer();
+        saveAllConfig();
         log(`➕ Subnicho customizado "${val}" adicionado.`);
+        showToast(`Subnicho "${val}" adicionado!`, 'success');
       }
       inputCustomCategory.value = '';
     });
 
-    function getAllSubCategoryIds() {
-      const ids = [];
-      CASCADE_DATA.forEach(cat => {
-        cat.subs.forEach(s => ids.push(s.id));
-      });
-      return ids;
-    }
-
+    // CARREGAR E SALVAR CONFIGURAÇÕES DO SERVIDOR
     async function loadConfig() {
       try {
-        const saved = localStorage.getItem('ml_categories');
-        if (saved) {
-          selectedCategories = JSON.parse(saved);
-        } else {
-          selectedCategories = getAllSubCategoryIds();
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.categories) && data.categories.length > 0) {
+            selectedCategories = data.categories;
+          }
+          if (data.affiliateId) document.getElementById('affiliateId').value = data.affiliateId;
+          if (data.groupName) document.getElementById('groupName').value = data.groupName;
+          if (data.groupId) document.getElementById('groupId').value = data.groupId;
+          if (data.minPrice !== undefined) document.getElementById('minPrice').value = data.minPrice;
+          if (data.maxPrice !== undefined) document.getElementById('maxPrice').value = data.maxPrice;
+          if (data.minDiscount !== undefined) document.getElementById('minDiscount').value = data.minDiscount;
+          if (data.maxResults !== undefined) document.getElementById('maxResults').value = data.maxResults;
+          if (data.cronSchedule) document.getElementById('cronSchedule').value = data.cronSchedule;
+
+          // Facebook
+          if (data.fbEnabled !== undefined) document.getElementById('fbEnabled').checked = !!data.fbEnabled;
+          if (Array.isArray(data.fbGroupUrls)) document.getElementById('fbGroupUrls').value = data.fbGroupUrls.join('\n');
+          if (data.fbMaxGroupsPerCycle !== undefined) document.getElementById('fbMaxGroupsPerCycle').value = data.fbMaxGroupsPerCycle;
+          if (data.fbDelayBetweenPosts !== undefined) document.getElementById('fbDelayBetweenPosts').value = data.fbDelayBetweenPosts;
+          if (data.fbWaGroupLink) document.getElementById('fbWaGroupLink').value = data.fbWaGroupLink;
+          if (data.fbAutoJoin !== undefined) document.getElementById('fbAutoJoin').checked = !!data.fbAutoJoin;
+
+          // Instagram
+          if (data.igEnabled !== undefined) document.getElementById('igEnabled').checked = !!data.igEnabled;
+          if (data.igUsername) document.getElementById('igUsername').value = data.igUsername;
+          if (data.igPassword) document.getElementById('igPassword').value = data.igPassword;
+          if (data.igMaxPostsPerCycle !== undefined) document.getElementById('igMaxPostsPerCycle').value = data.igMaxPostsPerCycle;
+          if (data.igBioLink) document.getElementById('igBioLink').value = data.igBioLink;
+          if (data.igCustomHashtags) document.getElementById('igCustomHashtags').value = data.igCustomHashtags;
+          if (data.igAutoDmEnabled !== undefined) document.getElementById('igAutoDmEnabled').checked = !!data.igAutoDmEnabled;
+          if (data.igTriggerWord) document.getElementById('igTriggerWord').value = data.igTriggerWord;
+          if (data.igDmTemplate) document.getElementById('igDmTemplate').value = data.igDmTemplate;
+
+          updateStatus(!!data.isRunning);
+          log('✅ Configurações carregadas do banco de dados Neon PostgreSQL.');
         }
-      } catch {
-        selectedCategories = getAllSubCategoryIds();
+      } catch (err) {
+        log('ℹ️ Erro ao carregar configurações do servidor: ' + err);
       }
       renderCascadeTree();
-      updateStatus(true);
-      log(`⚡ Catálogo ativado: ${selectedCategories.length} subcategorias selecionadas e ativas.`);
+    }
+
+    async function saveAllConfig() {
+      const payload = {
+        categories: selectedCategories,
+        affiliateId: document.getElementById('affiliateId').value.trim(),
+        groupName: document.getElementById('groupName').value.trim(),
+        groupId: document.getElementById('groupId').value.trim(),
+        minPrice: parseFloat(document.getElementById('minPrice').value) || 30,
+        maxPrice: parseFloat(document.getElementById('maxPrice').value) || 10000,
+        minDiscount: parseFloat(document.getElementById('minDiscount').value) || 0,
+        maxResults: parseInt(document.getElementById('maxResults').value, 10) || 10,
+        cronSchedule: document.getElementById('cronSchedule').value,
+        fbEnabled: document.getElementById('fbEnabled').checked,
+        fbGroupUrls: document.getElementById('fbGroupUrls').value.split('\n').map(u => u.trim()).filter(Boolean),
+        fbMaxGroupsPerCycle: parseInt(document.getElementById('fbMaxGroupsPerCycle').value, 10) || 64,
+        fbDelayBetweenPosts: parseInt(document.getElementById('fbDelayBetweenPosts').value, 10) || 60,
+        fbWaGroupLink: document.getElementById('fbWaGroupLink').value.trim(),
+        fbAutoJoin: document.getElementById('fbAutoJoin').checked,
+        igEnabled: document.getElementById('igEnabled').checked,
+        igUsername: document.getElementById('igUsername').value.trim(),
+        igPassword: document.getElementById('igPassword').value.trim(),
+        igMaxPostsPerCycle: parseInt(document.getElementById('igMaxPostsPerCycle').value, 10) || 3,
+        igBioLink: document.getElementById('igBioLink').value.trim(),
+        igCustomHashtags: document.getElementById('igCustomHashtags').value.trim(),
+        igAutoDmEnabled: document.getElementById('igAutoDmEnabled').checked,
+        igTriggerWord: document.getElementById('igTriggerWord').value.trim(),
+        igDmTemplate: document.getElementById('igDmTemplate').value.trim(),
+      };
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.success) {
+          log('💾 Configurações salvas e sincronizadas com sucesso no Neon PostgreSQL!');
+          showToast('Configurações salvas no banco de dados!', 'success');
+        } else {
+          showToast('Erro ao salvar: ' + data.error, 'error');
+        }
+      } catch (err) {
+        showToast('Falha na comunicação com o servidor', 'error');
+      }
     }
 
     function updateStatus(running) {
       isRunning = running;
       if (isRunning) {
         statusDot.className = 'status-dot active';
-        statusText.textContent = 'Automação Ativa (24/7 no Render)';
+        statusText.textContent = 'Automação Ativa (24/7)';
         btnToggleBot.textContent = '⏹️ Pausar Automação';
         btnToggleBot.className = 'btn btn-secondary';
       } else {
@@ -1047,47 +1558,224 @@
       }
     }
 
-    async function saveConfigToServer() {
-      try {
-        localStorage.setItem('ml_categories', JSON.stringify(selectedCategories));
-        log(`✅ Configurações salvas: ${selectedCategories.length} subcategorias selecionadas.`);
-      } catch {
-        log('ℹ️ Configurações mantidas no navegador.');
-      }
-    }
-
-    // Histórico de Ofertas
+    // CARREGAR HISTÓRICO DE OFERTAS
     async function loadHistory() {
-      offersGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; grid-column: 1/-1; padding: 1rem; text-align: center;">⚡ Automação ativa no Render + Neon PostgreSQL. Ofertas enviadas são armazenadas e sincronizadas automaticamente no banco de dados.</div>';
-      log('📸 Galeria sincronizada com o banco Neon PostgreSQL.');
+      offersGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; grid-column: 1/-1; padding: 2rem; text-align: center;">⚡ Carregando galeria de ofertas enviadas...</div>';
+
+      try {
+        const res = await fetch('/api/history');
+        if (res.ok) {
+          const items = await res.json();
+          if (Array.isArray(items) && items.length > 0) {
+            offersGrid.innerHTML = '';
+            items.slice(0, 48).forEach(item => {
+              const card = document.createElement('div');
+              card.className = 'offer-card';
+              card.innerHTML = `
+                <img src="${item.imageUrl || item.thumbnail || 'https://http2.mlstatic.com/D_NQ_NP_2X_704701-MLA45648833919_042021-F.webp'}" class="offer-img" alt="Foto da Oferta" onerror="this.src='https://http2.mlstatic.com/D_NQ_NP_2X_704701-MLA45648833919_042021-F.webp'">
+                <div class="offer-details">
+                  <div class="offer-title">${item.title || 'Oferta Mercado Livre'}</div>
+                  <div class="offer-prices">
+                    <span class="price-current">R$ ${item.price || '0,00'}</span>
+                    ${item.originalPrice ? `<span class="price-old">R$ ${item.originalPrice}</span>` : ''}
+                  </div>
+                  <div class="offer-footer">
+                    <span class="seller-tag">${item.seller || 'Mercado Livre'}</span>
+                    <a href="${item.link || item.permalink || '#'}" target="_blank" style="color: var(--accent-blue); text-decoration: none; font-weight: 700;">Ver Link ↗</a>
+                  </div>
+                </div>
+              `;
+              offersGrid.appendChild(card);
+            });
+            log(`📸 Histórico carregado com ${items.length} ofertas enviadas.`);
+            return;
+          }
+        }
+      } catch {}
+
+      offersGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; grid-column: 1/-1; padding: 2rem; text-align: center;">⚡ Nenhuma oferta registrada recentemente. Inicie a automação para povoar a galeria.</div>';
     }
 
-    // Listeners
-    btnSaveConfig.addEventListener('click', saveConfigToServer);
+    // HANDLERS DOS BOTÕES
+    btnSaveConfig.addEventListener('click', saveAllConfig);
+    btnSaveFbConfig.addEventListener('click', saveAllConfig);
+    document.getElementById('btnSaveIgConfig').addEventListener('click', saveAllConfig);
     btnRefreshHistory.addEventListener('click', loadHistory);
 
-    btnToggleBot.addEventListener('click', () => {
-      isRunning = !isRunning;
-      updateStatus(isRunning);
-      log(isRunning ? '🚀 Automação 24/7 ativa no servidor Render (Worker em Nuvem).' : '⏸️ Automação pausada.');
+    const btnTestIg = document.getElementById('btnTestIg');
+    if (btnTestIg) {
+      btnTestIg.addEventListener('click', async () => {
+        log('📸 Salvando e disparando teste no Instagram...');
+        btnTestIg.disabled = true;
+        btnTestIg.textContent = '⏳ Publicando no Instagram...';
+        try {
+          await saveAllConfig();
+          const payload = {
+            username: document.getElementById('igUsername').value.trim(),
+            password: document.getElementById('igPassword').value.trim(),
+            bioLink: document.getElementById('igBioLink').value.trim(),
+            hashtags: document.getElementById('igCustomHashtags').value.trim(),
+            triggerWord: document.getElementById('igTriggerWord').value.trim(),
+          };
+          const res = await fetch('/api/bot/test-instagram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          log(data.message);
+          showToast(data.message, data.success ? 'success' : 'error');
+        } catch (err) {
+          showToast('Erro de conexão ao disparar teste no Instagram', 'error');
+        } finally {
+          btnTestIg.disabled = false;
+          btnTestIg.textContent = '📸 Testar Postagem Instagram';
+        }
+      });
+    }
+
+    const btnTestIgAutoDm = document.getElementById('btnTestIgAutoDm');
+    if (btnTestIgAutoDm) {
+      btnTestIgAutoDm.addEventListener('click', async () => {
+        log('💬 Salvando e verificando comentários do Instagram para Auto-DM...');
+        btnTestIgAutoDm.disabled = true;
+        btnTestIgAutoDm.textContent = '⏳ Verificando Comentários & Direct...';
+        try {
+          await saveAllConfig();
+          const payload = {
+            username: document.getElementById('igUsername').value.trim(),
+            password: document.getElementById('igPassword').value.trim(),
+            triggerWord: document.getElementById('igTriggerWord').value.trim(),
+            dmTemplate: document.getElementById('igDmTemplate').value.trim(),
+          };
+          const res = await fetch('/api/bot/test-instagram-autodm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          log(data.message);
+          showToast(data.message, data.success ? 'success' : 'error');
+        } catch (err) {
+          showToast('Erro ao testar Auto-DM do Instagram', 'error');
+        } finally {
+          btnTestIgAutoDm.disabled = false;
+          btnTestIgAutoDm.textContent = '💬 Testar Auto-DM (Comentários)';
+        }
+      });
+    }
+
+    btnToggleBot.addEventListener('click', async () => {
+      const endpoint = isRunning ? '/api/bot/stop' : '/api/bot/start';
+      btnToggleBot.disabled = true;
+      try {
+        const res = await fetch(endpoint, { method: 'POST' });
+        const data = await res.json();
+        updateStatus(!!data.isRunning);
+        log(data.message);
+        showToast(data.message, data.isRunning ? 'success' : 'warning');
+      } catch {
+        showToast('Erro ao alterar status da automação', 'error');
+      } finally {
+        btnToggleBot.disabled = false;
+      }
     });
 
     btnRunNow.addEventListener('click', async () => {
-      log('⚡ Ciclo de varredura imediata solicitado ao worker em nuvem (Render + Neon).');
+      log('⚡ Ciclo de varredura imediata solicitado ao servidor...');
       btnRunNow.disabled = true;
-      btnRunNow.textContent = '⏳ Processando...';
-      setTimeout(() => {
+      btnRunNow.innerHTML = '⏳ Varrendo Mercado Livre & Postando...';
+
+      try {
+        const res = await fetch('/api/bot/run-now', { method: 'POST' });
+        const data = await res.json();
+        log(data.message);
+        showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) {
+          await loadHistory();
+        }
+      } catch (err) {
+        showToast('Erro ao disparar varredura', 'error');
+      } finally {
         btnRunNow.disabled = false;
-        btnRunNow.textContent = '⚡ Enviar Ofertas Agora';
-        log('✅ Ciclo de varredura e envio concluído com sucesso!');
-      }, 2500);
+        btnRunNow.innerHTML = '⚡ Enviar Ofertas Agora';
+      }
     });
 
-    // Init - Renderização Instantânea
-    selectedCategories = getAllSubCategoryIds();
-    renderCascadeTree();
+    // GERENCIAMENTO DE SESSÕES LOCAIS
+    async function loadSessionsStatus() {
+      try {
+        const res = await fetch('/api/sessions/status');
+        if (res.ok) {
+          const status = await res.json();
+          updateSessionBadge('Wa', status.wa);
+          updateSessionBadge('Fb', status.fb);
+          updateSessionBadge('Ig', status.ig);
+        }
+      } catch (err) {
+        console.error('Erro ao verificar status das sessões:', err);
+      }
+    }
+
+    function updateSessionBadge(platform, statusObj) {
+      const dot = document.getElementById('dot' + platform + 'Session');
+      const text = document.getElementById('text' + platform + 'Session');
+      if (!dot || !text) return;
+
+      if (statusObj && statusObj.connected) {
+        dot.className = 'status-dot active';
+        text.textContent = 'Sessão Conectada';
+      } else if (statusObj && statusObj.profileExists) {
+        dot.className = 'status-dot';
+        text.textContent = 'Perfil Criado';
+      } else {
+        dot.className = 'status-dot';
+        text.textContent = 'Não Conectado';
+      }
+    }
+
+    const btnConnectWa = document.getElementById('btnConnectWa');
+    if (btnConnectWa) {
+      btnConnectWa.addEventListener('click', async () => {
+        showToast('Abrindo janela do Chrome para login no WhatsApp...', 'info');
+        log('💬 Disparando conector local do WhatsApp...');
+        await fetch('/api/sessions/connect-wa', { method: 'POST' });
+        setTimeout(loadSessionsStatus, 4000);
+      });
+    }
+
+    const btnConnectFb = document.getElementById('btnConnectFb');
+    if (btnConnectFb) {
+      btnConnectFb.addEventListener('click', async () => {
+        showToast('Abrindo janela do Chrome para login no Facebook...', 'info');
+        log('📘 Disparando conector local do Facebook...');
+        await fetch('/api/sessions/connect-fb', { method: 'POST' });
+        setTimeout(loadSessionsStatus, 4000);
+      });
+    }
+
+    const btnConnectIg = document.getElementById('btnConnectIg');
+    if (btnConnectIg) {
+      btnConnectIg.addEventListener('click', async () => {
+        showToast('Abrindo janela do Chrome para login no Instagram...', 'info');
+        log('📸 Disparando conector local do Instagram...');
+        await fetch('/api/sessions/connect-ig', { method: 'POST' });
+        setTimeout(loadSessionsStatus, 4000);
+      });
+    }
+
+    const btnRefreshSessions = document.getElementById('btnRefreshSessions');
+    if (btnRefreshSessions) {
+      btnRefreshSessions.addEventListener('click', () => {
+        loadSessionsStatus();
+        showToast('Status das sessões atualizado!', 'success');
+      });
+    }
+
+    // INICIALIZAÇÃO
     loadConfig();
     loadHistory();
+    loadSessionsStatus();
   </script>
 </body>
 </html>
