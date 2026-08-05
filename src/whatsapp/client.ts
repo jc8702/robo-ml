@@ -298,18 +298,25 @@ export async function sendOfferWithPhoto(
 ): Promise<boolean> {
   const caption = formatIndividualOffer(offer);
 
+  // Sanitiza a URL da foto para garantir imagem JPG em alta resolução (NUNCA envia .webp para não gerar figurinhas)
+  let imageUrl = (offer.thumbnail || '').trim();
+  if (imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl;
+  imageUrl = imageUrl.replace(/\.webp$/i, '.jpg').replace(/-(I|V|F)\.(jpg|webp)/gi, '-O.jpg');
+  const hasValidJpg = imageUrl.startsWith('http') && !imageUrl.toLowerCase().endsWith('.webp');
+
   // 1. Tenta enviar via Baileys se a conexão já estiver aberta
   if (sock && isConnected) {
     try {
-      if (offer.thumbnail && offer.thumbnail.startsWith('http')) {
+      if (hasValidJpg) {
         await sock.sendMessage(targetJid, {
-          image: { url: offer.thumbnail },
+          image: { url: imageUrl },
           caption: caption,
+          mimetype: 'image/jpeg',
         });
       } else {
         await sock.sendMessage(targetJid, { text: caption });
       }
-      console.log(`  [WA] ✅ Foto + Oferta enviada via Baileys: "${offer.title.substring(0, 30)}..."`);
+      console.log(`  [WA] ✅ Foto JPG + Oferta enviada via Baileys: "${offer.title.substring(0, 30)}..."`);
       return true;
     } catch (err) {
       console.error(`  [WA] Tentativa via Baileys falhou, alternando para Playwright:`, (err as Error)?.message || err);
@@ -330,12 +337,13 @@ export async function sendOfferWithPhoto(
   // 3. Fallback: Tenta inicializar / conectar o cliente Baileys
   try {
     const client = await initWhatsAppClient();
-    if (offer.thumbnail && offer.thumbnail.startsWith('http')) {
+    if (hasValidJpg) {
       await client.sendMessage(targetJid, {
-        image: { url: offer.thumbnail },
+        image: { url: imageUrl },
         caption: caption,
+        mimetype: 'image/jpeg',
       });
-      console.log(`  [WA] ✅ Foto + Oferta enviada via Baileys (init): "${offer.title.substring(0, 30)}..."`);
+      console.log(`  [WA] ✅ Foto JPG + Oferta enviada via Baileys (init): "${offer.title.substring(0, 30)}..."`);
     } else {
       await client.sendMessage(targetJid, { text: caption });
       console.log(`  [WA] ✅ Oferta enviada via Baileys (init): "${offer.title.substring(0, 30)}..."`);

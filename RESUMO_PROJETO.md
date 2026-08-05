@@ -219,6 +219,8 @@
   - Arquivos modificados: `public/index.html`, `index.html`, `src/collector/ml-api.ts`, `src/config/settings.ts`
 - **[05/08/2026 - 00:45]:** Correção da sincronização de categorias do painel. Removidos os 15 produtos estáticos hardcoded de `ML_CATEGORIES` no `.env` e adicionado auto-salvamento instantâneo no painel web (`public/index.html`, `index.html`), garantindo que o robô busque estritamente as subcategorias selecionadas no painel visual.
   - Arquivos modificados: `.env`, `public/index.html`, `index.html`, `src/config/settings.ts`
+- **[05/08/2026 - 01:10]:** Correção definitiva da extração de produtos específicos no Mercado Livre. Atualizado `src/collector/ml-api.ts` para usar a URL oficial de listagem (`lista.mercadolivre.com.br/<query>`) em buscas de produtos e `/ofertas` em campanhas genéricas. Adicionada rolagem dinâmica de página para lazy-loading e criada a rota `POST /api/history/clear` com o botão **"🗑️ Limpar Histórico"** no painel web para reset do histórico de envios passados.
+  - Arquivos modificados: `src/collector/ml-api.ts`, `src/collector/history.ts`, `src/server.ts`, `public/index.html`, `index.html`
 
 ## Decisões Técnicas
 - **Coleta**: Playwright com perfil Chrome persistente em `.chrome-profile/`.

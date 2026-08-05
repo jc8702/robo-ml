@@ -118,7 +118,9 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
         let thumbnail = imgEl ? (imgEl.getAttribute('src') || imgEl.src || imgEl.getAttribute('data-src') || '') : '';
         if (thumbnail.startsWith('//')) thumbnail = 'https:' + thumbnail;
         if (thumbnail && thumbnail.includes('mlstatic.com')) {
-          thumbnail = thumbnail.replace(/-I\.jpg/g, '-O.jpg').replace(/-V\.jpg/g, '-O.jpg').replace(/-F\.jpg/g, '-O.jpg');
+          thumbnail = thumbnail
+            .replace(/\.webp$/i, '.jpg')
+            .replace(/-(I|V|F)\.(jpg|webp)/gi, '-O.jpg');
         }
 
         const moneyElements = Array.from(card.querySelectorAll('.andes-money-amount')) as HTMLElement[];
