@@ -221,6 +221,8 @@
   - Arquivos modificados: `.env`, `public/index.html`, `index.html`, `src/config/settings.ts`
 - **[05/08/2026 - 01:10]:** Correção definitiva da extração de produtos específicos no Mercado Livre. Atualizado `src/collector/ml-api.ts` para usar a URL oficial de listagem (`lista.mercadolivre.com.br/<query>`) em buscas de produtos e `/ofertas` em campanhas genéricas. Adicionada rolagem dinâmica de página para lazy-loading e criada a rota `POST /api/history/clear` com o botão **"🗑️ Limpar Histórico"** no painel web para reset do histórico de envios passados.
   - Arquivos modificados: `src/collector/ml-api.ts`, `src/collector/history.ts`, `src/server.ts`, `public/index.html`, `index.html`
+- **[05/08/2026 - 01:34]:** Eliminação completa da geração de figurinhas (`.webp`). Sanitização de URLs de foto para `.jpg` em alta resolução (`-O.jpg`), definição explícita de `mimetype: image/jpeg` e inclusão de trava de segurança no Playwright que cancela modais sem legenda e garante postagem no formato padrão desenhado com preview de imagem do link.
+  - Arquivos modificados: `src/whatsapp/client.ts`, `src/whatsapp/wa-playwright.ts`, `src/collector/ml-api.ts`
 
 ## Decisões Técnicas
 - **Coleta**: Playwright com perfil Chrome persistente em `.chrome-profile/`.
