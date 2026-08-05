@@ -1019,7 +1019,10 @@
       <div class="card">
         <div class="card-title">
           <span>📸 Histórico Recente de Ofertas Enviadas</span>
-          <button class="btn btn-secondary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnRefreshHistory">🔄 Atualizar Galeria</button>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;" id="btnRefreshHistory">🔄 Atualizar Galeria</button>
+            <button class="btn btn-secondary" style="padding: 0.4rem 0.85rem; font-size: 0.82rem; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;" id="btnClearHistory">🗑️ Limpar Histórico</button>
+          </div>
         </div>
 
         <div class="offers-grid" id="offersGrid">
@@ -1596,11 +1599,30 @@
       offersGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; grid-column: 1/-1; padding: 2rem; text-align: center;">⚡ Nenhuma oferta registrada recentemente. Inicie a automação para povoar a galeria.</div>';
     }
 
+    async function clearHistory() {
+      if (!confirm('Deseja realmente limpar todo o histórico de ofertas enviadas? Isso permitirá que o robô envie ofertas novamente.')) return;
+      try {
+        const res = await fetch('/api/history/clear', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Histórico de envios limpo!', 'success');
+          log('🗑️ Histórico de envios zerado com sucesso.');
+          loadHistory();
+        } else {
+          showToast('Erro ao limpar histórico', 'error');
+        }
+      } catch {
+        showToast('Falha de conexão com o servidor', 'error');
+      }
+    }
+
     // HANDLERS DOS BOTÕES
     btnSaveConfig.addEventListener('click', saveAllConfig);
     btnSaveFbConfig.addEventListener('click', saveAllConfig);
     document.getElementById('btnSaveIgConfig').addEventListener('click', saveAllConfig);
     btnRefreshHistory.addEventListener('click', loadHistory);
+    const btnClearHistory = document.getElementById('btnClearHistory');
+    if (btnClearHistory) btnClearHistory.addEventListener('click', clearHistory);
 
     const btnTestIg = document.getElementById('btnTestIg');
     if (btnTestIg) {

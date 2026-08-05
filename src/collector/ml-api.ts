@@ -218,7 +218,22 @@ export async function searchOffers(
 
     page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
 
-    const url = `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(query)}`;
+    const queryLower = query.toLowerCase().trim();
+    const dealCampaignTerms = [
+      'ofertas do dia', 'ofertas relampago', 'mais vendidos', 'menos de 50 reais',
+      'ofertas de mercado', 'liquidação queima de estoque', 'cupons e descontos',
+      'menor preco 30 dias', 'ofertas', 'promocoes', 'promoção', 'desconto',
+      'achadinhos', 'oferta', 'queima de estoque', 'liquidação', 'destaques'
+    ];
+    const isGenericQuery = dealCampaignTerms.some((term) => queryLower.includes(term));
+
+    let url = '';
+    if (isGenericQuery) {
+      url = 'https://www.mercadolivre.com.br/ofertas';
+    } else {
+      const cleanSlug = encodeURIComponent(queryLower).replace(/%20/g, '-');
+      url = `https://lista.mercadolivre.com.br/${cleanSlug}`;
+    }
 
     console.log(`  📡 Acessando: ${url}`);
 
@@ -228,8 +243,9 @@ export async function searchOffers(
       await page.waitForTimeout(2000);
     }
 
-    // Espera a navegação estabilizar (captura redirecionamentos cliente)
+    // Espera a navegação estabilizar e realiza rolagem suave para carregar produtos lazy-load
     await page.waitForSelector('.poly-card, .ui-search-result, article, li.ui-search-layout__item, .promotion-item', { timeout: 8000 }).catch(() => {});
+    await page.evaluate(() => window.scrollBy(0, 1800)).catch(() => {});
     await page.waitForTimeout(1500);
     console.log(`  🔎 URL Resolvida: "${page.url()}" | Título: "${await page.title()}"`);
 
@@ -246,36 +262,41 @@ export async function searchOffers(
       }
     }
 
-    const queryLower = query.toLowerCase().trim();
-    const dealCampaignTerms = [
-      'ofertas do dia', 'ofertas relampago', 'mais vendidos', 'menos de 50 reais',
-      'ofertas de mercado', 'liquidação queima de estoque', 'cupons e descontos',
-      'menor preco 30 dias', 'ofertas', 'promocoes', 'promoção', 'desconto',
-      'achadinhos', 'oferta', 'queima de estoque', 'liquidação', 'destaques'
-    ];
-    const isGenericQuery = dealCampaignTerms.some((term) => queryLower.includes(term));
-
     const queryKeywords = queryLower
       .replace(/[^a-z0-9\s]/g, '')
       .split(/\s+/)
-      .filter((w) => w.length >= 3);
+      .filter((w) => w.length >= 2);
 
     let relevantOffers = offers.filter((offer) => {
       if (isGenericQuery) return true;
       const titleLower = offer.title.toLowerCase();
+      // Se for ex "playstation 5", aceita se contiver "playstation", "ps5" ou "console"
+      if (queryLower.includes('playstation')) {
+        return titleLower.includes('playstation') || titleLower.includes('ps5') || titleLower.includes('ps4') || titleLower.includes('dualsense');
+      }
+      if (queryLower.includes('xbox')) {
+        return titleLower.includes('xbox') || titleLower.includes('series') || titleLower.includes('controle xbox');
+      }
+      if (queryLower.includes('nintendo')) {
+        return titleLower.includes('nintendo') || titleLower.includes('switch') || titleLower.includes('joy-con');
+      }
       return queryKeywords.some((keyword) => titleLower.includes(keyword));
     });
 
     // Fallback: se não encontrou nenhuma oferta relevante com os termos da busca (ou caiu em account-verification),
-    // acessa a página oficial de ofertas do Mercado Livre (/ofertas) e aceita as ofertas promocionais do feed!
+    // acessa a busca padrão do Mercado Livre ou feed /ofertas
     if (page.url().includes('account-verification') || relevantOffers.length === 0) {
-      console.log(`  ⚠️ 0 ofertas relevantes para "${query}". Carregando feed de destaques (/ofertas)...`);
-      await page.goto('https://www.mercadolivre.com.br/ofertas', { waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => {});
-      await page.waitForTimeout(2500);
-      const fallbackOffers = await extractOffers(page);
-      if (fallbackOffers.length > 0) {
-        relevantOffers = fallbackOffers;
-        console.log(`  [DEBUG] Feed /ofertas: ${fallbackOffers.length} ofertas promocionais obtidas.`);
+      console.log(`  ⚠️ 0 ofertas com filtro rígido para "${query}". Utilizando produtos da busca do ML...`);
+      if (offers.length > 0) {
+        relevantOffers = offers;
+      } else {
+        await page.goto('https://www.mercadolivre.com.br/ofertas', { waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => {});
+        await page.waitForTimeout(2500);
+        const fallbackOffers = await extractOffers(page);
+        if (fallbackOffers.length > 0) {
+          relevantOffers = fallbackOffers;
+          console.log(`  [DEBUG] Feed /ofertas: ${fallbackOffers.length} ofertas promocionais obtidas.`);
+        }
       }
     }
 

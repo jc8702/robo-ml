@@ -217,6 +217,8 @@
   - Arquivos modificados: `public/index.html`, `index.html`, `src/config/settings.ts`
 - **[05/08/2026 - 00:34]:** Implementação da categoria dedicada **Ofertas Destaque & Campanhas ML** (`ofertas-destaque-ml`) e otimização do coletor Playwright (`src/collector/ml-api.ts`) para extração direta de ofertas das liquidações oficiais do Mercado Livre.
   - Arquivos modificados: `public/index.html`, `index.html`, `src/collector/ml-api.ts`, `src/config/settings.ts`
+- **[05/08/2026 - 00:45]:** Correção da sincronização de categorias do painel. Removidos os 15 produtos estáticos hardcoded de `ML_CATEGORIES` no `.env` e adicionado auto-salvamento instantâneo no painel web (`public/index.html`, `index.html`), garantindo que o robô busque estritamente as subcategorias selecionadas no painel visual.
+  - Arquivos modificados: `.env`, `public/index.html`, `index.html`, `src/config/settings.ts`
 
 ## Decisões Técnicas
 - **Coleta**: Playwright com perfil Chrome persistente em `.chrome-profile/`.

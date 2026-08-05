@@ -6,7 +6,7 @@ import { loadConfig, loadConfigAsync, type AppConfig } from './config/settings.j
 import { runAutomaticCycle, startScheduler, stopScheduler } from './scheduler/cron.js';
 import { dbSaveMultipleSettings, dbGetSettings, initDb } from './db/index.js';
 import { currentPairingCode, pairingCodeRequestedAt, currentQrRaw } from './whatsapp/client.js';
-import { getSentOffersHistoryFromDb } from './collector/history.js';
+import { getSentOffersHistoryFromDb, clearSentHistory } from './collector/history.js';
 import { checkWhatsAppSessionStatus, ensureWhatsAppLoggedIn } from './whatsapp/wa-playwright.js';
 import { checkFacebookSessionStatus, openFacebookBrowser } from './facebook/fb-poster.js';
 import { checkInstagramSessionStatus, openInstagramBrowser } from './instagram/ig-poster.js';
@@ -318,6 +318,16 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       return sendJson(items);
     } catch {
       return sendJson([]);
+    }
+  }
+
+  // POST /api/history/clear
+  if (method === 'POST' && (url === '/api/history/clear' || url.endsWith('/history/clear'))) {
+    try {
+      await clearSentHistory();
+      return sendJson({ success: true, message: 'Histórico de envios limpo com sucesso!' });
+    } catch (err) {
+      return sendJson({ success: false, error: String(err) }, 400);
     }
   }
 

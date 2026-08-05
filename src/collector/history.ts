@@ -30,6 +30,23 @@ export interface ProductPriceHistory {
 }
 
 /**
+ * Limpa o histórico de envios locais e do banco Neon PostgreSQL.
+ */
+export async function clearSentHistory(): Promise<void> {
+  try {
+    if (existsSync(HISTORY_FILE)) {
+      writeFileSync(HISTORY_FILE, '[]', 'utf-8');
+    }
+    const db = getDbPool();
+    if (db) {
+      await db.query('DELETE FROM sent_history');
+    }
+  } catch (err) {
+    console.error('Erro ao limpar histórico:', err);
+  }
+}
+
+/**
  * Carrega a lista completa de ofertas enviadas para exibição no painel web.
  * Tenta carregar do Neon PostgreSQL primeiro, depois faz fallback para o arquivo local .sent-history.json.
  */
