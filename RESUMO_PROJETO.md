@@ -4,7 +4,14 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 05/08/2026 - 20:00
+- **Última Atualização:** 05/08/2026 - 20:05
+
+- **05/08/2026 - 20:05:** **🛠️ CORREÇÃO DEFINITIVA DO ENVIO DE FOTO + LEGENDA E EXPURGO DE MODAIS NO WHATSAPP WEB (`src/collector/ml-api.ts`, `src/whatsapp/wa-playwright.ts`):**
+  - **Extração Precisa de Imagens no ML (`ml-api.ts`)**: Corrigida a extração de thumbnails para ignorar placeholders SVG/data-URI do Mercado Livre e capturar URLs reais de imagem JPG em alta resolução (`-O.jpg`).
+  - **Aumento do Timeout de Upload (`wa-playwright.ts`)**: Ajustado o timeout de desanexação do modal de mídia de 4s para 20s, permitindo que a imagem em alta resolução seja enviada completamente pelo WhatsApp Web sem cancelamento prematuro.
+  - **Digitação com `execCommand('insertText')`**: Substituída a colagem via clipboard por inserção nativa `execCommand('insertText')`, garantindo compatibilidade 100% com o editor Lexical do WhatsApp Web.
+  - **Recarregamento de Segurança em Falhas (`forceClearAllWaModals`)**: Caso algum modal persista após tentativas de fechamento, o robô recarrega a página (`page.reload()`) incondicionalmente, garantindo 0 modais travados na tela.
+  - **Validação de Build**: Executado `npm run build` com compilação 100% limpa sem erros.
 
 - **05/08/2026 - 20:00:** **📸 CORREÇÃO DO PERFIL DO INSTAGRAM NAS MENSAGENS (`src/formatter/whatsapp.ts`, `src/formatter/facebook.ts`):**
   - **Ajuste do Handle do Instagram**: Atualizado o perfil do Instagram nas legendas geradas para o WhatsApp e Facebook de `@achadosdomeli.bnu` para `@achadosmeli.bnu` (`instagram.com/achadosmeli.bnu`).

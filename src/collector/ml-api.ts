@@ -402,9 +402,23 @@ async function extractOffers(page: Page): Promise<MLOffer[]> {
         if (!title || title.length < 5) return;
 
         const imgEl = card.querySelector('img.poly-component__picture, img[data-testid="picture"], img') as HTMLImageElement | null;
-        let thumbnail = imgEl ? (imgEl.getAttribute('src') || imgEl.src || imgEl.getAttribute('data-src') || '') : '';
+        let thumbnail = '';
+        if (imgEl) {
+          const dataSrc = imgEl.getAttribute('data-src') || imgEl.getAttribute('data-srcset');
+          const src = imgEl.getAttribute('src') || imgEl.src;
+          const srcset = imgEl.getAttribute('srcset');
+          
+          if (dataSrc && !dataSrc.startsWith('data:')) {
+            thumbnail = dataSrc;
+          } else if (srcset && !srcset.startsWith('data:')) {
+            thumbnail = srcset.split(',')[0].split(' ')[0];
+          } else if (src && !src.startsWith('data:')) {
+            thumbnail = src;
+          }
+        }
+
         if (thumbnail.startsWith('//')) thumbnail = 'https:' + thumbnail;
-        if (thumbnail && thumbnail.includes('mlstatic.com')) {
+        if (thumbnail && (thumbnail.includes('mlstatic.com') || thumbnail.startsWith('http'))) {
           thumbnail = thumbnail
             .replace(/\.webp$/i, '.jpg')
             .replace(/-(I|V|F)\.(jpg|webp)/gi, '-O.jpg');

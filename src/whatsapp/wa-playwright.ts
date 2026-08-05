@@ -191,47 +191,32 @@ export async function forceClearAllWaModals(page: Page): Promise<void> {
 
     if (!hasModalInDom) return;
 
-    console.warn('[WA-PLAYWRIGHT] ⚠️ Modal/Editor detectado no DOM do WhatsApp Web. Executando descarte rigoroso...');
+    console.warn('[WA-PLAYWRIGHT] ⚠️ Modal/Editor detectado no DOM do WhatsApp Web. Executando limpeza...');
 
-    for (let i = 0; i < 3; i++) {
-      try {
-        // 1. Tenta clicar no botão "Descartar" no diálogo de confirmação
-        await page.evaluate(() => {
-          const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
-          for (const b of buttons) {
-            const txt = (b.textContent || '').toLowerCase();
-            if (txt.includes('descartar') || txt.includes('discard')) {
-              (b as HTMLElement).click();
-            }
+    for (let i = 0; i < 2; i++) {
+      await page.keyboard.press('Escape').catch(() => {});
+      await page.waitForTimeout(200);
+      await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
+        for (const b of buttons) {
+          const txt = (b.textContent || '').toLowerCase();
+          if (txt.includes('descartar') || txt.includes('discard')) {
+            (b as HTMLElement).click();
           }
-        }).catch(() => {});
-        await page.waitForTimeout(300);
-
-        // 2. Envia 2 vezes o comando Escape para fechar popup e editor
-        await page.keyboard.press('Escape').catch(() => {});
-        await page.waitForTimeout(300);
-        await page.keyboard.press('Escape').catch(() => {});
-        await page.waitForTimeout(400);
-
-        // 3. Clica em botões com ícone de fechar (x)
-        await page.evaluate(() => {
-          const xIcons = Array.from(document.querySelectorAll('div[role="dialog"] [data-icon="x"], [data-icon="x"]'));
-          for (const icon of xIcons) {
-            const btn = (icon.closest('button, div[role="button"]') || icon) as HTMLElement;
-            if (btn) btn.click();
-          }
-        }).catch(() => {});
-        await page.waitForTimeout(300);
-
-        const isStillInDom = await page.evaluate(() => !!document.querySelector('div[role="dialog"]')).catch(() => false);
-        if (!isStillInDom) break;
-      } catch {}
+        }
+        const xIcons = Array.from(document.querySelectorAll('div[role="dialog"] [data-icon="x"], [data-icon="x"]'));
+        for (const icon of xIcons) {
+          const btn = (icon.closest('button, div[role="button"]') || icon) as HTMLElement;
+          if (btn) btn.click();
+        }
+      }).catch(() => {});
+      await page.waitForTimeout(300);
     }
 
-    // REGRA DE SEGURANÇA ABSOLUTA: Se o modal ainda existir na DOM, executa page.reload() INCONDICIONALMENTE!
+    // REGRA DE SEGURANÇA ABSOLUTA: Se o modal persistir, recarrega a página para garantir 0 modais travados na tela!
     const modalInDomAfter = await page.evaluate(() => !!document.querySelector('div[role="dialog"]')).catch(() => false);
     if (modalInDomAfter) {
-      console.warn('[WA-PLAYWRIGHT] 🔄 Executando page.reload() incondicional para expurgar o modal travado no WhatsApp Web...');
+      console.warn('[WA-PLAYWRIGHT] 🔄 Recarregando WhatsApp Web para expurgar modal travado...');
       await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
       await page.waitForTimeout(3000);
     }
@@ -250,49 +235,57 @@ export async function sendOfferWithPhotoPlaywright(
   try {
     const page = await ensureWhatsAppLoggedIn();
     
-    // REGRA IMUTÁVEL: Limpa preventivamente qualquer modal travado antes de iniciar a busca
+    // REGRA IMUTÁVEL: Limpa preventivamente qualquer modal travado antes de iniciar
     await forceClearAllWaModals(page);
 
     const caption = formatIndividualOffer(offer);
-
     const targetSearchTerm = (targetGroupOrPhone && targetGroupOrPhone.trim()) ? targetGroupOrPhone.trim() : (process.env.WHATSAPP_GROUP_NAME || '');
-    await selectWaGroupChat(page, targetSearchTerm);
+    
+    const selected = await selectWaGroupChat(page, targetSearchTerm);
+    if (!selected) {
+      console.warn(`[WA-PLAYWRIGHT] ⚠️ Não foi possível abrir a conversa: "${targetSearchTerm}"`);
+      return false;
+    }
 
-    // SE WA_DIRECT_POST_MODE estiver ativo ou habilitado, faz o envio direto no chat principal (SEM ABRIR NENHUM MODAL DE MÍDIA)
+    // SE WA_DIRECT_POST_MODE estiver ativo, faz o envio direto no chat principal (sem foto anexada)
     const useDirectPost = process.env.WA_DIRECT_POST_MODE === 'true' || process.env.WA_DISABLE_MEDIA_MODAL === 'true';
 
     if (!useDirectPost) {
-      // 1. Prepara a URL da imagem garantindo extensão JPEG em alta resolução (NUNCA usa WEBP para não virar figurinha)
+      // 1. Prepara a URL da imagem (JPG em alta resolução)
       let imageUrl = (offer.thumbnail || '').trim();
       if (imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl;
-      imageUrl = imageUrl.replace(/\.webp$/i, '.jpg').replace(/-(I|V|F)\.(jpg|webp)/gi, '-O.jpg');
+      if (imageUrl.includes('mlstatic.com') || imageUrl.startsWith('http')) {
+        imageUrl = imageUrl.replace(/\.webp$/i, '.jpg').replace(/-(I|V|F)\.(jpg|webp)/gi, '-O.jpg');
+      }
 
-      if (imageUrl && imageUrl.startsWith('http') && !imageUrl.toLowerCase().endsWith('.webp')) {
-        const tempImgPath = join(process.cwd(), `temp_offer_${Date.now()}.jpg`);
+      let tempImgPath = '';
+      if (imageUrl && imageUrl.startsWith('http')) {
         try {
-          // Limpeza preventiva da caixa de mensagem principal do chat
+          const response = await fetch(imageUrl);
+          if (response.ok) {
+            const buffer = await response.arrayBuffer();
+            if (buffer.byteLength > 1000) {
+              tempImgPath = join(process.cwd(), `temp_offer_${Date.now()}.jpg`);
+              writeFileSync(tempImgPath, Buffer.from(buffer));
+            }
+          }
+        } catch (dlErr) {
+          console.warn('[WA-PLAYWRIGHT] Aviso ao baixar imagem:', dlErr);
+        }
+      }
+
+      // Se tivermos a imagem baixada com sucesso em disco
+      if (tempImgPath && existsSync(tempImgPath)) {
+        try {
+          // Limpeza da caixa de texto principal antes do envio de mídia
           try {
             const mainChatBox = page.locator('#main div[contenteditable="true"]').first();
             if ((await mainChatBox.count()) > 0) {
               await mainChatBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
             }
-          } catch { /* ignora */ }
+          } catch {}
 
-          const response = await fetch(imageUrl);
-          const buffer = await response.arrayBuffer();
-          writeFileSync(tempImgPath, Buffer.from(buffer));
-
-          // Expande o menu de anexar (+) se necessário
-          const attachSelector = '[aria-label*="Anexar"], [title*="Anexar"], [data-icon="plus"], [data-icon="clip"]';
-          try {
-            const attachBtn = page.locator(attachSelector).first();
-            if (await attachBtn.isVisible({ timeout: 2500 })) {
-              await attachBtn.click();
-              await page.waitForTimeout(600);
-            }
-          } catch { /* se já estiver expandido */ }
-
-          // Injeta o arquivo JPG diretamente no <input type="file"> do DOM
+          // Injeta o arquivo JPG na entrada de arquivos do WhatsApp Web
           let fileUploaded = false;
           const fileInputSelectors = [
             'input[type="file"][accept*="image"]',
@@ -306,156 +299,112 @@ export async function sendOfferWithPhotoPlaywright(
               if ((await fileInput.count()) > 0) {
                 await fileInput.setInputFiles(tempImgPath);
                 fileUploaded = true;
-                console.log(`[WA-PLAYWRIGHT] ✅ Foto JPG carregada no WhatsApp Web via injetor DOM (${selector})!`);
-                break;
-              }
-            } catch { /* tenta próximo */ }
-          }
-
-          if (!fileUploaded) {
-            try {
-              const attachBtn = page.locator(attachSelector).first();
-              await attachBtn.click().catch(() => {});
-              await page.waitForTimeout(500);
-              const photoInput = page.locator('input[type="file"]').first();
-              await photoInput.setInputFiles(tempImgPath);
-              fileUploaded = true;
-            } catch (err) {
-              console.warn('[WA-PLAYWRIGHT] ⚠️ Falha ao injetar foto no input:', err);
-            }
-          }
-
-          await page.waitForTimeout(2000);
-
-          // Digita a legenda DENTRO do modal de mídia
-          const captionBox = page.locator('div[role="dialog"] div[contenteditable="true"]').first();
-          let textConfirmed = false;
-
-          if (await captionBox.isVisible({ timeout: 4000 })) {
-            console.log(`[WA-PLAYWRIGHT] 📝 Inserindo legenda no modal para: "${offer.title.substring(0, 25)}..."`);
-            const titleSnippet = offer.title.substring(0, 15);
-            const targetLink = offer.affiliateLink || offer.permalink || '';
-
-            for (let attempt = 1; attempt <= 3; attempt++) {
-              await captionBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
-              await captionBox.click({ force: true }).catch(() => captionBox.focus().catch(() => {}));
-              await page.waitForTimeout(300);
-
-              try {
-                await page.evaluate((textToPaste) => {
-                  navigator.clipboard.writeText(textToPaste);
-                }, caption);
-                await page.keyboard.press('Control+v');
-                await page.waitForTimeout(800);
-              } catch { /* se clipboard falhar */ }
-
-              const currentText = (await captionBox.textContent().catch(() => '')) || '';
-              const hasCorrectTitle = currentText.toLowerCase().includes(titleSnippet.toLowerCase());
-              const hasCorrectLink = targetLink ? currentText.includes(targetLink) : currentText.length > 50;
-
-              if (currentText && (hasCorrectTitle || hasCorrectLink)) {
-                textConfirmed = true;
-                console.log(`[WA-PLAYWRIGHT] ✅ Legenda exata pareada com sucesso!`);
-                break;
-              }
-
-              // Fallback: insertText API
-              await captionBox.focus().catch(() => {});
-              await page.keyboard.insertText(caption);
-              await page.waitForTimeout(800);
-
-              const fallbackText = (await captionBox.textContent().catch(() => '')) || '';
-              if (fallbackText && fallbackText.length > 50) {
-                textConfirmed = true;
-                console.log(`[WA-PLAYWRIGHT] ✅ Legenda inserida via API insertText!`);
-                break;
-              }
-            }
-          }
-
-          // TRAVA DE SEGURANÇA: Se a legenda NÃO foi confirmada no modal, CANCELA O MODAL para JAMAIS enviar foto isolada!
-          if (!textConfirmed) {
-            console.warn('[WA-PLAYWRIGHT] 🛡️ Legenda não confirmada no modal. Expurgando modal...');
-            await forceClearAllWaModals(page);
-            if (existsSync(tempImgPath)) rmSync(tempImgPath);
-            throw new Error('Legenda não pareada no modal - acionando fallback de post padrão com preview de link.');
-          }
-
-          // Dispara envio do modal com triplo mecanismo de execução
-          console.log(`[WA-PLAYWRIGHT] 🚀 Disparando envio do modal de mídia...`);
-
-          // 1. Foca a caixa de legenda e envia a tecla Enter
-          await captionBox.focus().catch(() => {});
-          await page.keyboard.press('Enter').catch(() => {});
-          await page.waitForTimeout(600);
-
-          // 2. Clique via JS no container do botão verde de envio
-          await page.evaluate(() => {
-            const sendElements = Array.from(
-              document.querySelectorAll('div[role="dialog"] [data-icon="send"], div[role="dialog"] [aria-label*="Enviar"], div[role="dialog"] [aria-label*="Send"]')
-            );
-            for (const el of sendElements) {
-              const btn = (el.closest('button, div[role="button"], span[role="button"]') || el) as HTMLElement;
-              if (btn) btn.click();
-            }
-          }).catch(() => {});
-          await page.waitForTimeout(600);
-
-          // 3. Clique direto via seletores Playwright no container do botão
-          const sendBtnSelectors = [
-            'div[role="dialog"] [data-icon="send"]',
-            'div[role="dialog"] [aria-label*="Enviar"]',
-            'div[role="dialog"] [aria-label*="Send"]',
-            'div[role="dialog"] button:has([data-icon="send"])',
-            'div[role="dialog"] div[role="button"]:has([data-icon="send"])',
-            '[data-icon="send"]',
-          ];
-
-          for (const sel of sendBtnSelectors) {
-            try {
-              const btn = page.locator(sel).first();
-              if ((await btn.count()) > 0) {
-                await btn.scrollIntoViewIfNeeded().catch(() => {});
-                await btn.click({ force: true }).catch(() => {});
-                await btn.evaluate((el: HTMLElement) => {
-                  const target = el.closest('button') || el.closest('[role="button"]') || el;
-                  (target as HTMLElement).click();
-                }).catch(() => {});
+                console.log(`[WA-PLAYWRIGHT] ✅ Foto JPG carregada no WhatsApp Web via injetor (${selector})!`);
                 break;
               }
             } catch {}
           }
 
-          // AGUARDA O MODAL DESANEXAR COM TIMEOUT DE 4 SEGUNDOS
-          let modalDetached = false;
-          try {
-            await page.waitForSelector('div[role="dialog"]', { state: 'detached', timeout: 4000 });
-            modalDetached = true;
-          } catch {
-            modalDetached = false;
+          if (!fileUploaded) {
+            const attachSelector = '[aria-label*="Anexar"], [title*="Anexar"], [data-icon="plus"], [data-icon="clip"]';
+            try {
+              const attachBtn = page.locator(attachSelector).first();
+              if (await attachBtn.isVisible({ timeout: 2000 })) {
+                await attachBtn.click();
+                await page.waitForTimeout(500);
+                const fileInput = page.locator('input[type="file"]').first();
+                await fileInput.setInputFiles(tempImgPath);
+                fileUploaded = true;
+              }
+            } catch {}
           }
 
-          if (modalDetached) {
-            if (existsSync(tempImgPath)) rmSync(tempImgPath);
-            console.log(`[WA-PLAYWRIGHT] ✅ Foto JPG + Legenda enviada com sucesso: "${offer.title.substring(0, 30)}..."`);
-            await page.waitForTimeout(4000);
-            return true;
-          }
+          if (fileUploaded) {
+            // Aguarda o modal de edição de mídia abrir (até 8s)
+            const modalVisible = await page.waitForSelector('div[role="dialog"]', { timeout: 8000 })
+              .then(() => true)
+              .catch(() => false);
 
-          console.warn('[WA-PLAYWRIGHT] 🚨 ALERTA: Modal de mídia não fechou. Expurgando modal da tela...');
+            if (modalVisible) {
+              console.log('[WA-PLAYWRIGHT] 🖼️ Modal de mídia aberto com sucesso!');
+              await page.waitForTimeout(800);
+
+              // Insere a legenda no modal usando execCommand (nativo do React/Lexical)
+              const captionBox = page.locator('div[role="dialog"] div[contenteditable="true"]').first();
+              if (await captionBox.isVisible({ timeout: 4000 })) {
+                console.log(`[WA-PLAYWRIGHT] 📝 Inserindo legenda no modal...`);
+
+                await captionBox.evaluate((el: HTMLElement, textToInsert: string) => {
+                  el.focus();
+                  const sel = window.getSelection();
+                  const range = document.createRange();
+                  range.selectNodeContents(el);
+                  sel?.removeAllRanges();
+                  sel?.addRange(range);
+                  document.execCommand('delete', false);
+                  document.execCommand('insertText', false, textToInsert);
+                }, caption).catch(() => {});
+
+                await page.waitForTimeout(500);
+
+                // Verificação de fallback via keyboard.insertText caso execCommand não preencha tudo
+                let currentText = (await captionBox.textContent().catch(() => '')) || '';
+                if (!currentText || currentText.length < 20) {
+                  await captionBox.focus().catch(() => {});
+                  await page.keyboard.insertText(caption).catch(() => {});
+                  await page.waitForTimeout(500);
+                  currentText = (await captionBox.textContent().catch(() => '')) || '';
+                }
+
+                console.log(`[WA-PLAYWRIGHT] ✅ Legenda confirmada (${currentText.length} caracteres).`);
+              }
+
+              // Clica no botão enviar
+              console.log(`[WA-PLAYWRIGHT] 🚀 Disparando envio do modal de mídia...`);
+
+              await page.evaluate(() => {
+                const sendIcon = document.querySelector('div[role="dialog"] [data-icon="send"], [aria-label*="Enviar"], [aria-label*="Send"]');
+                if (sendIcon) {
+                  const btn = (sendIcon.closest('button, div[role="button"], span[role="button"]') || sendIcon) as HTMLElement;
+                  btn.click();
+                }
+              }).catch(() => {});
+
+              const sendBtn = page.locator('div[role="dialog"] [data-icon="send"], div[role="dialog"] button:has([data-icon="send"])').first();
+              if ((await sendBtn.count()) > 0) {
+                await sendBtn.click({ force: true }).catch(() => {});
+              }
+
+              // Aguarda o modal desanexar com tempo suficiente para o upload da foto (até 20s)
+              console.log('[WA-PLAYWRIGHT] ⏳ Aguardando upload e conclusão da mídia (até 20s)...');
+              const modalDetached = await page.waitForSelector('div[role="dialog"]', { state: 'detached', timeout: 20000 })
+                .then(() => true)
+                .catch(() => false);
+
+              if (modalDetached) {
+                console.log(`[WA-PLAYWRIGHT] ✅ FOTO JPG + LEGENDA ENVIADAS COM SUCESSO! ("${offer.title.substring(0, 30)}...")`);
+                if (existsSync(tempImgPath)) try { rmSync(tempImgPath); } catch {}
+                await page.waitForTimeout(2000);
+                return true;
+              }
+
+              console.warn('[WA-PLAYWRIGHT] ⚠️ Modal de mídia não fechou em 20s. Forçando limpeza...');
+              await forceClearAllWaModals(page);
+            }
+          }
+        } catch (imgErr) {
+          console.error('[WA-PLAYWRIGHT] Erro no envio com mídia modal:', imgErr);
           await forceClearAllWaModals(page);
-          if (existsSync(tempImgPath)) rmSync(tempImgPath);
-        } catch (err) {
-          console.error('[WA-PLAYWRIGHT] Aviso no envio com mídia modal:', (err as Error)?.message || err);
-          await forceClearAllWaModals(page);
-          if (existsSync(tempImgPath)) rmSync(tempImgPath);
+        } finally {
+          if (tempImgPath && existsSync(tempImgPath)) {
+            try { rmSync(tempImgPath); } catch {}
+          }
         }
       }
     }
 
-    // MODAL BYPASS / FALLBACK IMUTÁVEL DE SEGURANÇA: Envio direto no chat principal com texto formatado + Preview de Link!
-    console.log('[WA-PLAYWRIGHT] 💬 Garantindo envio no chat principal com preview da imagem da oferta...');
-    
+    // Fallback de envio no chat principal caso a foto falhe ou WA_DIRECT_POST_MODE esteja ativo
+    console.log('[WA-PLAYWRIGHT] 💬 Garantindo envio no chat principal...');
     await forceClearAllWaModals(page);
     await selectWaGroupChat(page, targetSearchTerm);
 
@@ -463,10 +412,8 @@ export async function sendOfferWithPhotoPlaywright(
     if (messageBox) {
       await messageBox.click();
       await messageBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
-
-      // Injeta o texto completo formatado
       await page.keyboard.insertText(caption);
-      await page.waitForTimeout(2500);
+      await page.waitForTimeout(2000);
       await page.keyboard.press('Enter');
       console.log(`[WA-PLAYWRIGHT] ✅ Post enviado com sucesso no WhatsApp: "${offer.title.substring(0, 30)}..."`);
       return true;
@@ -474,7 +421,7 @@ export async function sendOfferWithPhotoPlaywright(
 
     return false;
   } catch (error) {
-    console.error('[WA-PLAYWRIGHT] Erro ao enviar mensagem:', error);
+    console.error('[WA-PLAYWRIGHT] Erro fatal no envio:', error);
     if (waPage && !waPage.isClosed()) {
       await forceClearAllWaModals(waPage).catch(() => {});
     }
