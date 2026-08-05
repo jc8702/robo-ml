@@ -290,7 +290,93 @@ export async function initWhatsAppClient(): Promise<WASocket> {
 
 // --- Envio de Ofertas ---
 
-import { sendOfferWithPhotoPlaywright } from './wa-playwright.js';
+import { sendOfferWithPhotoPlaywright, discoverWhatsAppGroupsPlaywright, ensureWhatsAppLoggedIn } from './wa-playwright.js';
+import { loadConfigAsync } from '../config/settings.js';
+import { dbSaveMultipleSettings } from '../db/index.js';
+
+export async function syncAllWhatsAppGroups(): Promise<string[]> {
+  const discovered: string[] = [];
+
+  // 1. Tenta varrer via Baileys se estiver conectado
+  if (sock && isConnected) {
+    try {
+      const groupMetadata = await sock.groupFetchAllParticipating();
+      const groups = Object.values(groupMetadata);
+      for (const g of groups) {
+        if (g.subject && !discovered.includes(g.subject)) discovered.push(g.subject);
+      }
+      console.log(`[WA-SYNC] 📱 Baileys detectou ${groups.length} grupo(s) de WhatsApp.`);
+    } catch (err) {
+      console.warn('[WA-SYNC] Erro ao obter grupos via Baileys:', err);
+    }
+  }
+
+  // 2. Tenta varrer via Playwright WhatsApp Web se a sessão existir
+  if (existsSync(join(process.cwd(), '.wa-profile'))) {
+    try {
+      const page = await ensureWhatsAppLoggedIn();
+      const pwGroups = await discoverWhatsAppGroupsPlaywright(page);
+      for (const name of pwGroups) {
+        if (name && !discovered.includes(name)) {
+          discovered.push(name);
+        }
+      }
+    } catch (pwErr) {
+      console.warn('[WA-SYNC] Erro ao obter grupos via Playwright:', pwErr);
+    }
+  }
+
+  // 3. Mescla com os grupos já existentes na configuração
+  const config = await loadConfigAsync();
+  const existingGroups = config.whatsapp.groupIds;
+  
+  const finalSet = new Set<string>();
+  // Preserva os grupos descobertos
+  discovered.forEach((item) => {
+    if (item && item.trim()) finalSet.add(item.trim());
+  });
+  // Preserva os grupos pré-existentes
+  existingGroups.forEach((item) => {
+    if (item && item.trim()) finalSet.add(item.trim());
+  });
+
+  const finalGroupList = Array.from(finalSet);
+
+  if (finalGroupList.length > 0) {
+    const groupStr = finalGroupList.join(',');
+    process.env.WHATSAPP_GROUP_ID = groupStr;
+
+    try {
+      await dbSaveMultipleSettings({ WHATSAPP_GROUP_ID: groupStr });
+      console.log(`[WA-SYNC] 💾 Total de ${finalGroupList.length} grupo(s) de WhatsApp sincronizado(s) no Neon DB.`);
+    } catch (dbErr) {
+      console.error('[WA-SYNC] Erro ao salvar grupos no Neon DB:', dbErr);
+    }
+  }
+
+  return finalGroupList;
+}
+
+export async function listGroups(): Promise<void> {
+  const client = await initWhatsAppClient();
+  const groupMetadata = await client.groupFetchAllParticipating();
+
+  console.log('\n[WA] Grupos de WhatsApp Encontrados:');
+  console.log('--------------------------------------');
+
+  const groups = Object.values(groupMetadata);
+  if (groups.length === 0) {
+    console.log('Nenhum grupo encontrado.');
+    return;
+  }
+
+  for (const group of groups) {
+    console.log(`Nome: ${group.subject}`);
+    console.log(`ID:   ${group.id}`);
+    console.log('--------------------------------------');
+  }
+}
+
 
 export async function sendOfferWithPhoto(
   offer: AffiliateOffer,
@@ -352,25 +438,5 @@ export async function sendOfferWithPhoto(
   } catch (error) {
     console.error(`  [WA] ❌ Não foi possível enviar no WhatsApp (Baileys & Playwright falharam). Vincule com: npm run wa:connect`);
     return false;
-  }
-}
-
-export async function listGroups(): Promise<void> {
-  const client = await initWhatsAppClient();
-  const groupMetadata = await client.groupFetchAllParticipating();
-
-  console.log('\n[WA] Grupos de WhatsApp Encontrados:');
-  console.log('--------------------------------------');
-
-  const groups = Object.values(groupMetadata);
-  if (groups.length === 0) {
-    console.log('Nenhum grupo encontrado.');
-    return;
-  }
-
-  for (const group of groups) {
-    console.log(`Nome: ${group.subject}`);
-    console.log(`ID:   ${group.id}`);
-    console.log('--------------------------------------');
   }
 }

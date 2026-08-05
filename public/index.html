@@ -881,8 +881,8 @@
           </div>
 
           <div class="field" style="grid-column: span 2;">
-            <label for="waGroupIds">IDs (JID) dos Grupos WhatsApp (um por linha ou separados por vírgula):</label>
-            <textarea id="waGroupIds" placeholder="120363428727908129@g.us&#10;120363012345678901@g.us" style="min-height: 80px;"></textarea>
+            <label for="waGroupIds">ID (JID) ou Nome do Grupo Principal do WhatsApp:</label>
+            <input type="text" id="waGroupIds" placeholder="120363428727908129@g.us ou GC 19 GRUPO VIP SO MERCADO LIVRE">
           </div>
 
           <div class="field" style="grid-column: span 2;">
@@ -993,7 +993,10 @@
       <div class="card">
         <div class="card-title">
           <span>📘 Postador de Grupos do Facebook</span>
-          <button class="btn btn-fb" id="btnSaveFbConfig">💾 Salvar Configurações do Facebook</button>
+          <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+            <button class="btn btn-fb" id="btnSyncFbGroups" style="padding: 0.4rem 0.85rem; font-size: 0.82rem;">🔍 Escanear & Sincronizar Meus Grupos do Facebook</button>
+            <button class="btn btn-fb" id="btnSaveFbConfig">💾 Salvar Configurações do Facebook</button>
+          </div>
         </div>
 
         <div style="margin-bottom: 1.5rem;">
@@ -1007,7 +1010,8 @@
         <div class="form-grid" style="margin-bottom: 1.5rem;">
           <div class="field" style="grid-column: span 2;">
             <label for="fbGroupUrls">URLs dos Grupos do Facebook (uma por linha ou separadas por vírgula):</label>
-            <textarea id="fbGroupUrls" placeholder="https://www.facebook.com/groups/ofertasmais&#10;https://www.facebook.com/groups/promocoesbrasil"></textarea>
+            <textarea id="fbGroupUrls" placeholder="https://www.facebook.com/groups/ofertasmais&#10;https://www.facebook.com/groups/promocoesbrasil" style="min-height: 120px;"></textarea>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Cole aqui as URLs dos seus grupos ou clique no botão acima para o robô escanear e preencher automaticamente todos os grupos que você participa. Novos grupos encontrados são salvos automaticamente aqui para os próximos ciclos.</span>
           </div>
 
           <div class="field" style="grid-column: span 2;">
@@ -1670,7 +1674,7 @@
             selectedCategories = data.categories;
           }
           if (data.affiliateId) document.getElementById('affiliateId').value = data.affiliateId;
-          if (Array.isArray(data.waGroupIds)) document.getElementById('waGroupIds').value = data.waGroupIds.join('\n');
+          if (Array.isArray(data.waGroupIds)) document.getElementById('waGroupIds').value = data.waGroupIds[0] || '';
           if (data.waGroupLink) document.getElementById('waGroupLink').value = data.waGroupLink;
           if (data.minPrice !== undefined) document.getElementById('minPrice').value = data.minPrice;
           if (data.maxPrice !== undefined) document.getElementById('maxPrice').value = data.maxPrice;
@@ -1728,7 +1732,7 @@
         priorityCategories: priorityCategories,
         usePriorityOnly: document.getElementById('usePriorityOnly').checked,
         affiliateId: document.getElementById('affiliateId').value.trim(),
-        waGroupIds: document.getElementById('waGroupIds').value.split('\n').map(u => u.trim()).filter(Boolean),
+        waGroupIds: [document.getElementById('waGroupIds').value.trim()].filter(Boolean),
         waGroupLink: document.getElementById('waGroupLink').value.trim(),
         minPrice: parseFloat(document.getElementById('minPrice').value) || 30,
         maxPrice: parseFloat(document.getElementById('maxPrice').value) || 10000,
@@ -1847,6 +1851,34 @@
     btnRefreshHistory.addEventListener('click', loadHistory);
     const btnClearHistory = document.getElementById('btnClearHistory');
     if (btnClearHistory) btnClearHistory.addEventListener('click', clearHistory);
+
+    const btnSyncFbGroups = document.getElementById('btnSyncFbGroups');
+    if (btnSyncFbGroups) {
+      btnSyncFbGroups.addEventListener('click', async () => {
+        btnSyncFbGroups.disabled = true;
+        btnSyncFbGroups.textContent = '⏳ Escaneando grupos do Facebook...';
+        showToast('Escaneando grupos do seu perfil no Facebook...', 'info');
+        log('📘 [FACEBOOK] Iniciando varredura dos grupos em que seu perfil está inscrito...');
+
+        try {
+          const res = await fetch('/api/facebook/sync-groups', { method: 'POST' });
+          const data = await res.json();
+          if (data.success && Array.isArray(data.groups)) {
+            document.getElementById('fbGroupUrls').value = data.groups.join('\n');
+            log(`✅ [FACEBOOK] Sincronização concluída! ${data.groups.length} grupo(s) do Facebook detectado(s).`);
+            showToast(`${data.groups.length} grupo(s) detectado(s) e preenchidos no Facebook!`, 'success');
+            await saveAllConfig();
+          } else {
+            showToast('Aviso ao sincronizar grupos do Facebook: ' + (data.error || 'Verifique se o Facebook está logado no Chrome'), 'warning');
+          }
+        } catch (err) {
+          showToast('Erro de comunicação ao sincronizar grupos do Facebook', 'error');
+        } finally {
+          btnSyncFbGroups.disabled = false;
+          btnSyncFbGroups.textContent = '🔍 Escanear & Sincronizar Meus Grupos do Facebook';
+        }
+      });
+    }
 
     const btnTestIg = document.getElementById('btnTestIg');
     if (btnTestIg) {

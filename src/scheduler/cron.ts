@@ -5,7 +5,7 @@ import type { AppConfig } from '../config/settings.js';
 import { loadConfigAsync } from '../config/settings.js';
 import { collectOffers } from '../collector/ml-api.js';
 import { convertOffers } from '../affiliate/link-converter.js';
-import { sendOfferWithPhoto, initWhatsAppClient } from '../whatsapp/client.js';
+import { sendOfferWithPhoto, initWhatsAppClient, syncAllWhatsAppGroups } from '../whatsapp/client.js';
 import { saveSentOffersToHistory } from '../collector/history.js';
 import { postOffersToFacebookGroups } from '../facebook/fb-poster.js';
 import { dbGetSettings } from '../db/index.js';
@@ -39,6 +39,9 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
   isCycleRunning = true;
 
   try {
+    // Sincroniza e descobre automaticamente novos grupos do WhatsApp em que a conta participa
+    await syncAllWhatsAppGroups().catch(() => {});
+
     // Recarrega config do Neon a cada ciclo para pegar alterações feitas pelo painel web
     const config = await loadConfigAsync();
 

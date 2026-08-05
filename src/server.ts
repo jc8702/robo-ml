@@ -8,7 +8,7 @@ import { dbSaveMultipleSettings, dbGetSettings, initDb } from './db/index.js';
 import { currentPairingCode, pairingCodeRequestedAt, currentQrRaw } from './whatsapp/client.js';
 import { getSentOffersHistoryFromDb, clearSentHistory } from './collector/history.js';
 import { checkWhatsAppSessionStatus, ensureWhatsAppLoggedIn } from './whatsapp/wa-playwright.js';
-import { checkFacebookSessionStatus, openFacebookBrowser } from './facebook/fb-poster.js';
+import { checkFacebookSessionStatus, openFacebookBrowser, syncFacebookProfileGroups } from './facebook/fb-poster.js';
 import { checkInstagramSessionStatus, openInstagramBrowser } from './instagram/ig-poster.js';
 import { checkMLLoginStatus, openMLLoginBrowser } from './collector/ml-api.js';
 import { getMercadoLivreCategoryCacheInfo, getMercadoLivreCategoryQuery, loadMercadoLivreCategoryCatalog } from './ml/categories.js';
@@ -201,6 +201,21 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       });
     }
     return sendJson({ code: null, message: 'Nenhum codigo pendente. WhatsApp ja esta conectado ou ainda nao inicializou.' });
+  }
+
+  // POST /api/facebook/sync-groups - escaneia e sincroniza os grupos participados no Facebook
+  if (method === 'POST' && (url === '/api/facebook/sync-groups' || url.endsWith('/facebook/sync-groups') || url.endsWith('/fb-sync'))) {
+    try {
+      const result = await syncFacebookProfileGroups();
+      return sendJson({
+        success: true,
+        groups: result.groups,
+        totalGroups: result.totalGroups,
+        message: `${result.totalGroups} grupo(s) do Facebook sincronizado(s) com sucesso!`,
+      });
+    } catch (err) {
+      return sendJson({ success: false, error: String(err) }, 500);
+    }
   }
 
   // Static Files (HTML / CSS / JS)

@@ -92,8 +92,9 @@ export interface AppConfig {
 
 function parseList(value: string | undefined): string[] {
   if (!value || value.trim() === '') return [];
-  return value.split(',').map((s) => s.trim()).filter(Boolean);
+  return value.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
 }
+
 
 /**
  * Carrega configurações de forma síncrona (local / env) com fallback padrão de categorias.

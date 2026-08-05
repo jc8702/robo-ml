@@ -126,7 +126,38 @@ export async function ensureWhatsAppLoggedIn(): Promise<Page> {
  * DESTRUIR incondicionalmente a janela de sobreposição e liberar a interface de chats.
  */
 export async function selectWaGroupChat(page: Page, targetSearchTerm: string): Promise<boolean> {
-  console.log(`[WA-PLAYWRIGHT] Selecionando conversa/grupo: "${targetSearchTerm}"...`);
+  const target = (targetSearchTerm || '').trim();
+  if (!target) return false;
+
+  console.log(`[WA-PLAYWRIGHT] Selecionando conversa/grupo: "${target}"...`);
+
+  // Se for um link de convite do WhatsApp (ex: https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N)
+  const linkMatch = target.match(/chat\.whatsapp\.com\/([A-Za-z0-9_-]+)/);
+  if (linkMatch && linkMatch[1]) {
+    const inviteCode = linkMatch[1];
+    console.log(`[WA-PLAYWRIGHT] 🔗 Detectado link de convite do WhatsApp (Código: ${inviteCode}). Navegando no WhatsApp Web...`);
+    try {
+      await page.goto(`https://web.whatsapp.com/accept?code=${inviteCode}`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+      await page.waitForTimeout(3000);
+
+      // Tenta clicar em botões de confirmação ("Entrar no grupo", "Conversar", "Entrar na conversa") se o modal aparecer
+      await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button, div[role="button"]'));
+        for (const b of btns) {
+          const text = (b.textContent || '').toLowerCase();
+          if (text.includes('entrar') || text.includes('conversar') || text.includes('join') || text.includes('chat')) {
+            (b as HTMLElement).click();
+          }
+        }
+      }).catch(() => {});
+      await page.waitForTimeout(2000);
+      return true;
+    } catch (linkErr) {
+      console.warn('[WA-PLAYWRIGHT] Aviso ao abrir grupo por link de convite:', linkErr);
+    }
+  }
+
+  // Busca padrão por nome ou JID na caixa de pesquisa do WhatsApp Web
   const searchSelector = '#side div[contenteditable="true"], [aria-label*="Pesquisar"], [aria-placeholder*="Pesquisar"], [data-tab="3"], [title*="Pesquisar"]';
   try {
     const searchBox = await page.waitForSelector(searchSelector, { timeout: 6000 });
@@ -135,7 +166,7 @@ export async function selectWaGroupChat(page: Page, targetSearchTerm: string): P
       await page.waitForTimeout(300);
       await searchBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
       await searchBox.fill('').catch(() => {});
-      await searchBox.type(targetSearchTerm, { delay: 80 }).catch(() => {});
+      await searchBox.type(target, { delay: 80 }).catch(() => {});
       await page.waitForTimeout(1500);
       await page.keyboard.press('Enter').catch(() => {});
       await page.waitForTimeout(1500);
@@ -224,7 +255,7 @@ export async function sendOfferWithPhotoPlaywright(
 
     const caption = formatIndividualOffer(offer);
 
-    const targetSearchTerm = process.env.WHATSAPP_GROUP_NAME || targetGroupOrPhone;
+    const targetSearchTerm = (targetGroupOrPhone && targetGroupOrPhone.trim()) ? targetGroupOrPhone.trim() : (process.env.WHATSAPP_GROUP_NAME || '');
     await selectWaGroupChat(page, targetSearchTerm);
 
     // SE WA_DIRECT_POST_MODE estiver ativo ou habilitado, faz o envio direto no chat principal (SEM ABRIR NENHUM MODAL DE MÍDIA)
@@ -459,5 +490,58 @@ export function checkWhatsAppSessionStatus(): { connected: boolean; profileExist
                      existsSync(join(WA_PROFILE_DIR, 'Default', 'Storage'));
   return { connected: hasCookies, profileExists };
 }
+
+/**
+ * Varre a lista de conversas do WhatsApp Web (#pane-side) e extrai os títulos de todos os grupos participados.
+ */
+export async function discoverWhatsAppGroupsPlaywright(page: Page): Promise<string[]> {
+  try {
+    console.log('[WA-PLAYWRIGHT] 🔍 Escaneando lista de conversas no WhatsApp Web para detectar grupos...');
+    await forceClearAllWaModals(page);
+    
+    // Aguarda o container da lista de conversas carregar
+    await page.waitForSelector('#pane-side', { timeout: 10000 }).catch(() => {});
+
+    // Rola suavemente a lista para carregar mais chats
+    await page.evaluate(() => {
+      const pane = document.querySelector('#pane-side');
+      if (pane) pane.scrollTop = pane.scrollHeight / 2;
+    }).catch(() => {});
+    await page.waitForTimeout(1000);
+
+    const groupsFound: string[] = await page.evaluate(() => {
+      const titles = new Set<string>();
+      
+      // Procura por todos os elementos de título no painel lateral
+      const spanElements = Array.from(document.querySelectorAll('#pane-side span[title]'));
+      for (const el of spanElements) {
+        const title = (el.getAttribute('title') || el.textContent || '').trim();
+        // Ignora contatos por telefone genéricos ou strings do sistema
+        if (!title || title.length < 2) continue;
+        if (/^\+?\d[\d\s-]{8,}$/.test(title)) continue; // ignora números de telefone individuais brutos
+        
+        // Verifica se o item possui ícone ou indicador de grupo no container pai
+        const chatContainer = el.closest('div[role="listitem"], div[tabindex]') || el.parentElement?.parentElement?.parentElement;
+        if (chatContainer) {
+          const hasGroupIcon = !!chatContainer.querySelector('[data-icon="default-group"], [data-icon="avatar-group"], [data-icon="community-outline"]');
+          const isGroupAria = (chatContainer.getAttribute('aria-label') || '').toLowerCase().includes('grupo');
+          
+          // Se tiver ícone de grupo, marca de grupo ou palavra indicativa no título
+          if (hasGroupIcon || isGroupAria || /(grupo|gc|promo|oferta|achado|vip|desconto|clube|multirão)/i.test(title)) {
+            titles.add(title);
+          }
+        }
+      }
+      return Array.from(titles);
+    });
+
+    console.log(`[WA-PLAYWRIGHT] 🔍 Escaneamento concluído: ${groupsFound.length} grupo(s) detectado(s).`);
+    return groupsFound;
+  } catch (err) {
+    console.error('[WA-PLAYWRIGHT] Erro ao escanear grupos no WhatsApp Web:', err);
+    return [];
+  }
+}
+
 
 

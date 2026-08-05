@@ -1251,15 +1251,48 @@ export async function syncJoinedFacebookGroups(page: Page): Promise<{ totalGroup
     // Atualiza variáveis em memória
     process.env.FB_GROUP_URLS = updatedGroupUrlsStr;
 
-    console.log(`\n✅ [SYNC] SUCESSO! GRUPOS DO SEU PERFIL SINCRONIZADOS NO .ENV:`);
+    // Sincroniza no Neon DB
+    const db = getDbPool();
+    if (db) {
+      db.query(
+        `INSERT INTO app_settings (key, value) VALUES ('FB_GROUP_URLS', $1)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [updatedGroupUrlsStr]
+      ).catch(() => {});
+    }
+
+    console.log(`\n✅ [SYNC] SUCESSO! GRUPOS DO SEU PERFIL SINCRONIZADOS NO .ENV E NEON DB:`);
     console.log(`  📊 Total de Grupos Encontrados: ${totalGroupsCount}`);
-    console.log(`  🔗 FB_GROUP_URLS atualizado no .env com todas as URLs`);
-    console.log(`  🎯 FB_MAX_GROUPS_PER_CYCLE atualizado para ${totalGroupsCount} no .env\n`);
+    console.log(`  🔗 FB_GROUP_URLS atualizado com todas as URLs`);
+    console.log(`  🎯 FB_MAX_GROUPS_PER_CYCLE atualizado para ${totalGroupsCount}\n`);
 
     return { totalGroups: totalGroupsCount, updated: true };
   } catch (error) {
     console.error(`  ❌ [SYNC] Erro ao sincronizar grupos do perfil:`, error);
     return { totalGroups: 0, updated: false };
+  }
+}
+
+/**
+ * Executa a varredura e sincronização dos grupos participados do perfil no Facebook sob demanda (via API/Painel).
+ */
+export async function syncFacebookProfileGroups(): Promise<{ totalGroups: number; groups: string[]; updated: boolean }> {
+  console.log('[FB-SYNC] 🌐 Iniciando varredura e sincronização de grupos do perfil do Facebook...');
+  try {
+    const context = await openFacebookBrowser();
+    const page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
+
+    const result = await syncJoinedFacebookGroups(page);
+
+    let currentGroupUrls: string[] = [];
+    if (process.env.FB_GROUP_URLS) {
+      currentGroupUrls = process.env.FB_GROUP_URLS.split(',').map((u) => u.trim()).filter(Boolean);
+    }
+
+    return { totalGroups: result.totalGroups || currentGroupUrls.length, groups: currentGroupUrls, updated: result.updated };
+  } catch (err) {
+    console.error('[FB-SYNC] Erro ao sincronizar grupos do Facebook:', err);
+    return { totalGroups: 0, groups: [], updated: false };
   }
 }
 
@@ -1408,7 +1441,17 @@ export function saveNewGroupToEnv(rawGroupUrl: string): { newTotal: number; newM
   process.env.FB_GROUP_URLS = updatedGroupUrlsStr;
   process.env.FB_MAX_GROUPS_PER_CYCLE = String(newMax);
 
-  console.log(`\n🎉 [AUTO-JOIN] NOVO GRUPO DO FACEBOOK ADICIONADO AO .ENV!`);
+  // Sincroniza no Neon DB
+  const db = getDbPool();
+  if (db) {
+    db.query(
+      `INSERT INTO app_settings (key, value) VALUES ('FB_GROUP_URLS', $1), ('FB_MAX_GROUPS_PER_CYCLE', $2)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [updatedGroupUrlsStr, String(newMax)]
+    ).catch(() => {});
+  }
+
+  console.log(`\n🎉 [AUTO-JOIN] NOVO GRUPO DO FACEBOOK ADICIONADO AO .ENV E NEON DB!`);
   console.log(`  🔗 Grupo: ${cleanGroupUrl}`);
   console.log(`  📊 FB_GROUP_URLS atualizado (${currentGroupUrls.length} grupos cadastrados no .env)`);
   console.log(`  ⬆️ FB_MAX_GROUPS_PER_CYCLE incrementado de ${currentMax} para ${newMax} no .env\n`);

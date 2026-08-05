@@ -4,7 +4,30 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 05/08/2026 - 17:27
+- **Última Atualização:** 05/08/2026 - 19:10
+
+- **05/08/2026 - 19:10:** **📘 VARREDURA & AUTOSSINCRONIZAÇÃO DE GRUPOS DO FACEBOOK & RESTAURAÇÃO DO WHATSAPP A GRUPO ÚNICO (`src/facebook/fb-poster.ts`, `src/server.ts`, `public/index.html`, `src/scheduler/cron.ts`):**
+  - **Restauração do WhatsApp a Grupo Único**: Removido o varredor de múltiplos grupos do WhatsApp e restaurada a configuração do WhatsApp para utilizar exclusivamente o grupo principal já configurado no `.env` (`WHATSAPP_GROUP_ID` / `WHATSAPP_GROUP_NAME`).
+  - **Varredor de Grupos do Facebook (`fb-poster.ts`)**: Implementada a função `syncFacebookProfileGroups` que acessa a página de grupos do perfil (`/groups/joins/`) via Playwright, extrai as URLs de todos os grupos em que o perfil está inscrito e sincroniza no `.env` e Neon PostgreSQL DB.
+  - **Auto-Join com Inclusão Automática**: Atualizada a função `saveNewGroupToEnv` para salvar automaticamente qualquer novo grupo de Facebook que o robô entrar na lista de `FB_GROUP_URLS` do `.env` e Neon DB, garantindo que o grupo entre nos ciclos seguintes.
+  - **Botão no Painel Visual (`public/index.html`)**: Adicionado o botão **"🔍 Escanear & Sincronizar Meus Grupos do Facebook"** na aba do Facebook do painel. Ao clicar, executa o escaneamento em tempo real, preenche o campo de texto `fbGroupUrls` e salva no banco de dados.
+  - **Endpoint da API (`src/server.ts`)**: Criada a rota `POST /api/facebook/sync-groups` para suporte a escaneamento sob demanda via painel web.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 19:05:** **🔍 DETECÇÃO & AUTOSSINCRONIZAÇÃO DE GRUPOS DE WHATSAPP PARTICIPADOS (`src/whatsapp/wa-playwright.ts`, `src/whatsapp/client.ts`, `src/scheduler/cron.ts`, `src/server.ts`, `public/index.html`):**
+  - **Varredor de Grupos (`wa-playwright.ts` & `client.ts`)**: Implementada a função `discoverWhatsAppGroupsPlaywright` para varrer a lista de chats do WhatsApp Web (`#pane-side`), identificar automaticamente todos os grupos participados pela conta e capturar seus nomes. Implementada também a função `syncAllWhatsAppGroups` que mescla grupos descobertos (via Playwright/Baileys) com grupos pré-existentes.
+  - **Botão no Painel Visual (`public/index.html`)**: Adicionado o botão **"🔍 Escanear & Sincronizar Meus Grupos"** no painel de configurações. Ao clicar, o sistema efetua o escaneamento em tempo real, preenche o campo de texto com todos os grupos encontrados e salva automaticamente no Neon PostgreSQL.
+  - **Endpoint da API (`src/server.ts`)**: Criado a rota `POST /api/whatsapp/sync-groups` para execução do escaneamento sob demanda via painel web.
+  - **Sincronização Automática em Cada Ciclo (`src/scheduler/cron.ts`)**: Adicionada a chamada `syncAllWhatsAppGroups()` no início do ciclo automático `runAutomaticCycle`, garantindo que novos grupos aos quais o usuário se junte no celular sejam descobertos e incluídos automaticamente antes dos envios de ofertas.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+
+- **05/08/2026 - 19:00:** **📱 SUPORTE A MÚLTIPLOS GRUPOS DE WHATSAPP POR LINK DE CONVITE, NOME OU JID & DIAGNÓSTICO DO FACEBOOK (`public/index.html`, `src/config/settings.ts`, `src/whatsapp/wa-playwright.ts`, `src/server.ts`):**
+  - **Suporte a Links de Convite de Grupos WhatsApp**: O campo do WhatsApp no Painel de Controle visual foi atualizado para aceitar links diretos (`https://chat.whatsapp.com/...`), nomes de grupos ou JIDs (separados por linha ou vírgula), espelhando o formato dos grupos do Facebook.
+  - **Navegação Direta por Link (`wa-playwright.ts`)**: Adicionada inteligência na função `selectWaGroupChat` para identificar links `chat.whatsapp.com/CODE`, navegando diretamente via `https://web.whatsapp.com/accept?code=CODE` no WhatsApp Web para abrir a conversa do grupo instantaneamente.
+  - **Iteração por GrupoAlvo (`wa-playwright.ts`)**: Removida a sobreposição rígida da variável global `WHATSAPP_GROUP_NAME` que forçava a busca do mesmo grupo em todas as iterações, permitindo ao robô iterar por cada grupo configurado no array `groupIds`.
+  - **Parsing Flexível de Listas (`settings.ts`)**: Atualizada a função `parseList` para suportar separadores por quebra de linha (`\n`) e vírgulas (`,`).
+  - **Diagnóstico do Log do Facebook**: Esclarecido o motivo do aviso `⚠️ [FACEBOOK] Facebook habilitado mas nenhum grupo configurado` (variável `FB_GROUP_URLS` vazia).
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
 
 - **05/08/2026 - 17:27:** **⏱️ REORDENAMENTO DE FLUXO: AUTO-JOIN DE GRUPOS MOVIDO PARA O FINAL DO PROCESSO (`src/facebook/fb-poster.ts`):**
   - **Reordenação do Fluxo**: A busca e entrada em novos grupos do Facebook (`autoDiscoverAndJoinFacebookGroups`) foi transferida do início do ciclo para o **final do processo**, após a conclusão completa dos envios para os grupos do WhatsApp, postagens nos grupos do Facebook e Instagram.
