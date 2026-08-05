@@ -32,41 +32,48 @@ async function openBrowser(): Promise<{ browser: Browser; context: BrowserContex
   const executablePath = findBrowserPath();
   const isCloud = isCloudEnvironment();
 
-  const launchOptions: any = {
-    headless: isCloud,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-infobars',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-    ],
-    ignoreDefaultArgs: ['--enable-automation'],
-  };
-
-  if (executablePath) {
-    launchOptions.executablePath = executablePath;
+  if (!existsSync(BROWSER_PROFILE_DIR)) {
+    mkdirSync(BROWSER_PROFILE_DIR, { recursive: true });
   }
 
-  const browser = await chromium.launch(launchOptions);
-  const context = await browser.newContext({
-    locale: 'pt-BR',
+  const contextOptions: any = {
+    headless: isCloud,
     viewport: { width: 1366, height: 768 },
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    locale: 'pt-BR',
     extraHTTPHeaders: {
       'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
       'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
       'sec-ch-ua-mobile': '?0',
       'sec-ch-ua-platform': '"Windows"',
     },
-  });
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-infobars',
+      '--disable-dev-shm-usage',
+    ],
+    ignoreDefaultArgs: ['--enable-automation'],
+  };
+
+  if (executablePath && !isCloud) {
+    contextOptions.executablePath = executablePath;
+  }
+
+  let context: BrowserContext;
+  try {
+    context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, contextOptions);
+  } catch {
+    delete contextOptions.executablePath;
+    context = await chromium.launchPersistentContext(BROWSER_PROFILE_DIR, contextOptions);
+  }
 
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
   });
 
-  return { browser, context };
+  return { browser: context as any, context };
 }
 
 /**
@@ -233,8 +240,7 @@ export async function searchOffers(
     if (isGenericQuery) {
       url = 'https://www.mercadolivre.com.br/ofertas';
     } else {
-      const cleanSlug = encodeURIComponent(queryLower).replace(/%20/g, '-');
-      url = `https://lista.mercadolivre.com.br/${cleanSlug}`;
+      url = `https://www.mercadolivre.com.br/jm/search?as_word=${encodeURIComponent(queryLower)}`;
     }
 
     console.log(`  📡 Acessando: ${url}`);
