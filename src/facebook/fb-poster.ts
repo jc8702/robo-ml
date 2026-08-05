@@ -877,20 +877,24 @@ async function postToFacebookGroup(
       await randomDelay(1000, 2000);
     }
 
-    // 3. SE O FACEBOOK TENTAR GERAR CARTÃO DE PRÉVIA DO LINK (ex: do whatsapp) APÓS O TEXTO,
-    // E REMOVER A FOTO DO PRODUTO: detecta e clica em "Remover prévia" se houver prévia de link concorrente
+    // 3. SE O FACEBOOK TENTAR GERAR CARTÃO DE PRÉVIA DO LINK APÓS O TEXTO,
+    // E REMOVER OU ATROPELAR A FOTO DO PRODUTO: detecta e clica em "Remover prévia" imediatamente
     try {
       const removePreviewSelectors = [
         'div[role="dialog"] [aria-label="Remover prévia"]',
         'div[role="dialog"] [aria-label="Remove preview"]',
         'div[role="dialog"] [aria-label="Remover cartão de prévia"]',
+        'div[role="dialog"] [aria-label="Remover prévia de link"]',
+        'div[role="dialog"] [aria-label="Remove link preview"]',
+        'div[role="dialog"] [aria-label*="Remover"][aria-label*="link"]',
+        'div[role="dialog"] [aria-label*="Remove"][aria-label*="link"]',
       ];
       for (const removeSel of removePreviewSelectors) {
         try {
           const removeBtn = page.locator(removeSel).first();
-          if (await removeBtn.isVisible({ timeout: 1500 })) {
+          if (await removeBtn.isVisible({ timeout: 1200 }).catch(() => false)) {
             console.log('  ⚠️ Detectada prévia de link gerada sobre o texto. Removendo prévia de link...');
-            await removeBtn.click();
+            await removeBtn.click().catch(() => {});
             await randomDelay(1000, 1500);
           }
         } catch { /* ignora */ }
@@ -947,189 +951,39 @@ async function postToFacebookGroup(
     // Espera publicação processar
     await randomDelay(3000, 5000);
 
-    // 4. ENVIA O PRIMEIRO COMENTÁRIO EXCLUSIVAMENTE NA PUBLICAÇÃO QUE FOI ENVIADA AGORA
-    try {
-      console.log('  💬 Localizando a postagem criada para inserir o 1º comentário...');
-      await randomDelay(3000, 5000);
-
-      // Verificação de post pendente para aprovação dos moderadores do grupo
-      const pendingApprovalSelectors = [
-        'text="aprovação"',
-        'text="pendente"',
-        'text="pending approval"',
-        'text="Submit for admin approval"',
-        'text="enviada para análise"',
-        'text="análise dos administradores"',
-        'text="análise de administradores"',
-        'text="análise de moderadores"',
-        'text="análise do administrador"',
-        '[aria-label*="aprovação"]',
-        '[aria-label*="approval"]',
-      ];
-      let isPending = false;
-      for (const pSel of pendingApprovalSelectors) {
-        try {
-          const pEl = page.locator(pSel).first();
-          if (await pEl.isVisible({ timeout: 1200 }).catch(() => false)) {
-            isPending = true;
-            break;
-          }
-        } catch {}
-      }
-
-      if (isPending) {
-        console.warn(`  🗑️ [PURGA DE APROVAÇÃO] Grupo "${groupUrl}" expurgado por exigir aprovação prévia de administradores/moderadores.`);
-        removeInvalidGroupUrlFromEnv(groupUrl, 'Exige aprovação prévia de administradores');
-        await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
-        return false;
-      }
-
-      // Localiza com isolamento estrito o artigo da publicação criada pelo próprio usuário
-      const targetArticle = await findNewlyCreatedPostArticle(page, offer);
-
-      if (!targetArticle) {
-        console.log('  ⚠️ Postagem recém-criada não pôde ser isolada no feed. Comentário suprimido para segurança.');
-        return true;
-      }
-
-      console.log(`  🎯 Postagem do próprio usuário isolada! Inserindo 1º comentário com link do WhatsApp...`);
-
-      // Clica no botão "Comentar" para focar/abrir o campo de entrada do comentário DENTRO do artigo do usuário
-      const openCommentSelectors = [
-        '[aria-label*="Comentar"]',
-        '[aria-label*="Comment"]',
-        '[aria-label*="comentá"]',
-        '[aria-label*="Deixar um comentário"]',
-        '[aria-label*="Write a comment"]',
-        'div[role="button"]:has-text("Comentar")',
-        'div[role="button"]:has-text("Comment")',
-        'div[role="button"]:has-text("comentá")',
-        'button:has-text("Comentar")',
-        'button:has-text("Comment")',
-      ];
-      for (const sel of openCommentSelectors) {
-        try {
-          const openComment = targetArticle.locator(sel).first();
-          if (await openComment.isVisible({ timeout: 1200 })) {
-            await openComment.scrollIntoViewIfNeeded().catch(() => {});
-            await openComment.click({ force: true });
-            await randomDelay(800, 1500);
-            break;
-          }
-        } catch { /* tenta o próximo seletor */ }
-      }
-
-      // Busca o campo de comentário ESPECIFICAMENTE dentro do artigo isolado do usuário
-      const commentBoxSelectors = [
-        'div[contenteditable="true"][aria-label*="Comment as"]',
-        'div[contenteditable="true"][aria-label*="Comentar como"]',
-        'div[contenteditable="true"][aria-label*="comentá"]',
-        'div[contenteditable="true"][aria-label*="Comentar"]',
-        'div[contenteditable="true"][aria-label*="Escreva"]',
-        'div[contenteditable="true"][aria-label*="comment"]',
-        'div[contenteditable="true"][aria-label*="Comment"]',
-        'div[contenteditable="true"][role="textbox"]',
-        'div[contenteditable="true"]',
-        '[role="textbox"][contenteditable="true"]',
-        'form [contenteditable="true"]',
-        '[role="textbox"]',
-      ];
-
-      let commentBox = null;
-      for (const sel of commentBoxSelectors) {
-        try {
-          const el = targetArticle.locator(sel).first();
-          if (await el.isVisible({ timeout: 1500 })) {
-            commentBox = el;
-            break;
-          }
-        } catch { /* próximo */ }
-      }
-
-      // TRAVA DE SEGURANÇA: Se a caixa de comentário não existir estritamente dentro da postagem do próprio usuário, expurga o grupo por ineficiência
-      if (!commentBox) {
-        console.warn(`  🗑️ [PURGA DE COMENTÁRIO] Grupo "${groupUrl}" expurgado por não permitir comentários de membros.`);
-        removeInvalidGroupUrlFromEnv(groupUrl, 'Caixa de comentário desativada/bloqueada para membros');
-        await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
-        return false;
-      }
-
-      await commentBox.scrollIntoViewIfNeeded().catch(() => {});
-      await commentBox.click({ force: true }).catch(() => {});
-      await randomDelay(800, 1200);
-
-      const waCommentText = formatFacebookWaComment(waGroupLink);
-
-      // Limpa a caixa de comentário antes de inserir
-      await commentBox.evaluate((el: HTMLElement) => { el.innerHTML = ''; }).catch(() => {});
-      await randomDelay(300, 500);
-
-      // 1. Injeta texto usando Clipboard
-      let textInserted = false;
+    // Verificação de post pendente para aprovação dos moderadores do grupo
+    const pendingApprovalSelectors = [
+      'text="aprovação"',
+      'text="pendente"',
+      'text="pending approval"',
+      'text="Submit for admin approval"',
+      'text="enviada para análise"',
+      'text="análise dos administradores"',
+      'text="análise de administradores"',
+      'text="análise de moderadores"',
+      'text="análise do administrador"',
+      '[aria-label*="aprovação"]',
+      '[aria-label*="approval"]',
+    ];
+    let isPending = false;
+    for (const pSel of pendingApprovalSelectors) {
       try {
-        await page.evaluate((text) => {
-          return navigator.clipboard.writeText(text);
-        }, waCommentText);
-        await page.keyboard.press('Control+v');
-        await randomDelay(800, 1200);
-
-        const insertedText = (await commentBox.textContent().catch(() => '')) || '';
-        if (insertedText && (insertedText.includes('http') || insertedText.includes('chat.whatsapp.com') || insertedText.length > 10)) {
-          textInserted = true;
+        const pEl = page.locator(pSel).first();
+        if (await pEl.isVisible({ timeout: 1200 }).catch(() => false)) {
+          isPending = true;
+          break;
         }
-      } catch { textInserted = false; }
-
-      // 2. FALLBACK DIRETO VIA insertText: Injeta todo o bloco de texto multilinha de uma só vez
-      if (!textInserted) {
-        console.log('  📝 Inserindo texto da chamada do WhatsApp via API insertText...');
-        await commentBox.focus().catch(() => {});
-        await page.keyboard.insertText(waCommentText);
-        await randomDelay(1000, 1500);
-      }
-
-      // Pressiona Enter para enviar o comentário e aguarda a confirmação
-      await page.keyboard.press('Enter');
-      await randomDelay(3500, 5000);
-
-      let articleText = await targetArticle.innerText().catch(() => '');
-      const waLinkCheck = waGroupLink || 'chat.whatsapp.com';
-      let commentConfirmed = articleText.includes('chat.whatsapp.com') || (waGroupLink && articleText.includes(waGroupLink));
-
-      // Se o Enter não enviou, clica no botão "Enviar" / "Comentar" DENTRO do artigo do usuário
-      if (!commentConfirmed) {
-        const sendCommentSelectors = [
-          '[aria-label*="Enviar comentário"]',
-          '[aria-label*="Send comment"]',
-          '[aria-label*="Enviar"]',
-          '[aria-label*="Send"]',
-          '[aria-label*="Publicar"]',
-          'button:has-text("Comentar")',
-          'button:has-text("Comment")',
-          'div[role="button"]:has-text("Comentar")',
-          'div[role="button"]:has-text("Comment")',
-          'form [role="button"][tabindex="0"]',
-        ];
-        for (const sel of sendCommentSelectors) {
-          const sendButton = targetArticle.locator(sel).last();
-          if (await sendButton.isVisible({ timeout: 1200 }).catch(() => false)) {
-            await sendButton.click({ force: true });
-            await randomDelay(3000, 4500);
-            break;
-          }
-        }
-        articleText = await targetArticle.innerText().catch(() => '');
-        commentConfirmed = articleText.includes('chat.whatsapp.com') || (waGroupLink && articleText.includes(waGroupLink));
-      }
-
-      if (commentConfirmed) {
-        console.log('  ✅ 1º Comentário com link do grupo VIP do WhatsApp confirmado na publicação do próprio usuário!');
-      } else {
-        console.log('  ℹ️ 1º Comentário enviado para a publicação do próprio usuário no Facebook.');
-      }
-    } catch (commentErr) {
-      console.log(`  ⚠️ Aviso ao enviar comentário: ${commentErr}`);
+      } catch {}
     }
 
+    if (isPending) {
+      console.warn(`  🗑️ [PURGA DE APROVAÇÃO] Grupo "${groupUrl}" expurgado por exigir aprovação prévia de administradores/moderadores.`);
+      removeInvalidGroupUrlFromEnv(groupUrl, 'Exige aprovação prévia de administradores');
+      await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
+      return false;
+    }
+
+    console.log(`  ✅ Postagem publicada com sucesso no Facebook com CTAs do WhatsApp e Instagram incorporados no texto!`);
     return true;
   } catch (error) {
     console.error(`  ❌ Erro ao postar no grupo ${groupUrl}:`, error);
@@ -1211,12 +1065,6 @@ export async function postOffersToFacebookGroups(
     // 🔄 SYNC: Sincroniza automaticamente todos os grupos que o perfil já faz parte
     await syncJoinedFacebookGroups(page);
 
-    // 🔍 AUTO-JOIN: Busca e entra automaticamente em novos grupos se habilitado
-    const autoJoinEnabled = process.env.FB_AUTO_JOIN !== 'false';
-    if (autoJoinEnabled) {
-      await autoDiscoverAndJoinFacebookGroups(page, 1);
-    }
-
     // Recarrega dinamicamente a lista de grupos se for ciclo normal (não teste de 1 grupo)
     if (maxGroupsPerCycle > 1 && existsSync(join(process.cwd(), '.env'))) {
       const envContent = readFileSync(join(process.cwd(), '.env'), 'utf-8');
@@ -1290,6 +1138,13 @@ export async function postOffersToFacebookGroups(
         console.log(`  📍 [FILA CIRCULAR] Ponteiro de grupos atualizado para o grupo #${nextIndex + 1} no próximo ciclo.`);
       }
     } catch {}
+
+    // 🔍 AUTO-JOIN (EXCLUSIVO NO FINAL DO PROCESSO): Busca e entra automaticamente em novos grupos apenas após concluir todas as postagens
+    const autoJoinEnabled = process.env.FB_AUTO_JOIN !== 'false';
+    if (autoJoinEnabled) {
+      console.log('\n🔎 [FINAL DO PROCESSO] Iniciando busca e entrada em novos grupos do Facebook...');
+      await autoDiscoverAndJoinFacebookGroups(page, 1);
+    }
   } catch (error) {
     console.error('  ❌ Erro geral na automação do Facebook:', error);
   } finally {

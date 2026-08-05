@@ -82,6 +82,10 @@ export interface AppConfig {
     accessToken: string;
     useApi: boolean;
   };
+  whatsapp: {
+    groupIds: string[];
+    waGroupLink: string;
+  };
   facebook: FacebookConfig;
   instagram: InstagramConfig;
 }
@@ -126,6 +130,10 @@ export function loadConfig(): AppConfig {
     api: {
       accessToken,
       useApi: accessToken.length > 0,
+    },
+    whatsapp: {
+      groupIds: parseList(process.env.WHATSAPP_GROUP_ID || process.env.WHATSAPP_GROUP_NAME),
+      waGroupLink: process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
     },
     facebook: {
       enabled: process.env.FB_ENABLED === 'true',
@@ -197,6 +205,10 @@ export async function loadConfigAsync(): Promise<AppConfig> {
     api: {
       accessToken,
       useApi: accessToken.length > 0,
+    },
+    whatsapp: {
+      groupIds: parseList(dbSettings.WHATSAPP_GROUP_ID || process.env.WHATSAPP_GROUP_ID || dbSettings.WHATSAPP_GROUP_NAME || process.env.WHATSAPP_GROUP_NAME),
+      waGroupLink: dbSettings.FB_WA_GROUP_LINK || process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N',
     },
     facebook: {
       enabled: dbSettings.FB_ENABLED ? dbSettings.FB_ENABLED === 'true' : process.env.FB_ENABLED === 'true',

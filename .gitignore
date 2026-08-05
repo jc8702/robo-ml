@@ -20,3 +20,5 @@ test-*.jpg
 *.png
 clear-wa-session.mjs
 
+
+.vercel

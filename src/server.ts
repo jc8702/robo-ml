@@ -249,8 +249,8 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       maxResults: config.filters.maxResults,
       cronSchedule: dbSettings.AUTO_SCHEDULE_CRON || process.env.AUTO_SCHEDULE_CRON || '0 */3 * * *',
       affiliateId: config.affiliate.id,
-      groupId: dbSettings.WHATSAPP_GROUP_ID || process.env.WHATSAPP_GROUP_ID || '',
-      groupName: dbSettings.WHATSAPP_GROUP_NAME || process.env.WHATSAPP_GROUP_NAME || '',
+      waGroupIds: config.whatsapp.groupIds,
+      waGroupLink: config.whatsapp.waGroupLink,
       isRunning: isBotRunning,
       fbEnabled: config.facebook.enabled,
       fbGroupUrls: config.facebook.groupUrls,
@@ -299,6 +299,8 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
       if (typeof body.affiliateId === 'string' && body.affiliateId.trim()) updates.ML_AFFILIATE_ID = body.affiliateId.trim();
       if (typeof body.groupId === 'string') updates.WHATSAPP_GROUP_ID = body.groupId.trim();
       if (typeof body.groupName === 'string') updates.WHATSAPP_GROUP_NAME = body.groupName.trim();
+      if (Array.isArray(body.waGroupIds)) updates.WHATSAPP_GROUP_ID = body.waGroupIds.filter((id: string) => id.trim()).join(',');
+      if (typeof body.waGroupLink === 'string') updates.FB_WA_GROUP_LINK = body.waGroupLink.trim();
       if (body.minPrice !== undefined && body.minPrice !== '') updates.ML_MIN_PRICE = String(body.minPrice);
       if (body.maxPrice !== undefined && body.maxPrice !== '') updates.ML_MAX_PRICE = String(body.maxPrice);
       if (body.minDiscount !== undefined && body.minDiscount !== '') updates.ML_MIN_DISCOUNT = String(body.minDiscount);

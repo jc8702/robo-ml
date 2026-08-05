@@ -6,7 +6,7 @@ const CTA_PHRASES: string[] = [
   '👉 Garanta o seu com desconto antes que acabe:',
   '🛒 Clique no link oficial e aproveite a promoção:',
   '⚡ Resgate esse preço exclusivo acessando:',
-  '🔥 Confira todos os detalhes e garanta o seu:',
+  '🔥 Confira todos os detalhes e garanta o mehor preço:',
   '📲 Acesse o link para conferir no Mercado Livre:',
   '🎯 Estoque limitado! Aproveite clicando aqui:',
   '✨ Clique aqui para garantir a oferta especial:',
@@ -23,6 +23,14 @@ const CTA_PHRASES: string[] = [
   '🎁 Oferta imperdível! Clique no link e garanta o seu:',
   '🔴 Desconto ativo! Clique aqui para comprar com segurança:',
   '🚨 Preço promocional por tempo limitado, confira:',
+  '💥 Oferta garantida! Clique para acessar a loja:',
+  '🌟 Preço especial de hoje! Veja no link:',
+  '🔥 Menor preço encontrado! Clique para conferir:',
+  '🏆 Achadinho aprovado! Garanta no link oficial:',
+  '📌 Clique abaixo para garantir esse super desconto:',
+  '💡 Preço baixinho assim não dura muito! Confira:',
+  '⏩ Não deixe para depois, aproveite a oferta:',
+  '🥇 Melhor oportunidade do dia! Clique e veja:',
 ];
 
 const FOOTER_CTA_PHRASES: string[] = [

@@ -93,6 +93,7 @@ export async function convertOffers(
       converted.push({
         ...offer,
         affiliateLink,
+        productId: offer.productId,
       });
     } else {
       console.warn(`  🚫 [REGRA AFILIADO] Oferta "${offer.title}" descartada por falta de link de comissão de afiliado válido.`);

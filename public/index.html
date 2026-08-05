@@ -880,14 +880,14 @@
             <input type="text" id="affiliateId" placeholder="Ex: 52075002">
           </div>
 
-          <div class="field">
-            <label for="groupName">Nome do Grupo Alvo no WhatsApp:</label>
-            <input type="text" id="groupName" placeholder="Ex: GC 19 GRUPO VIP SO MERCADO LIVRE">
+          <div class="field" style="grid-column: span 2;">
+            <label for="waGroupIds">IDs (JID) dos Grupos WhatsApp (um por linha ou separados por vírgula):</label>
+            <textarea id="waGroupIds" placeholder="120363428727908129@g.us&#10;120363012345678901@g.us" style="min-height: 80px;"></textarea>
           </div>
 
-          <div class="field">
-            <label for="groupId">ID (JID) do Grupo WhatsApp (Opcional):</label>
-            <input type="text" id="groupId" placeholder="Ex: 120363428727908129@g.us">
+          <div class="field" style="grid-column: span 2;">
+            <label for="waGroupLink">Link de Convite do Grupo WhatsApp (usado nas postagens do Facebook):</label>
+            <input type="text" id="waGroupLink" placeholder="https://chat.whatsapp.com/ExemploGrupo">
           </div>
 
           <div class="field">
@@ -1670,8 +1670,8 @@
             selectedCategories = data.categories;
           }
           if (data.affiliateId) document.getElementById('affiliateId').value = data.affiliateId;
-          if (data.groupName) document.getElementById('groupName').value = data.groupName;
-          if (data.groupId) document.getElementById('groupId').value = data.groupId;
+          if (Array.isArray(data.waGroupIds)) document.getElementById('waGroupIds').value = data.waGroupIds.join('\n');
+          if (data.waGroupLink) document.getElementById('waGroupLink').value = data.waGroupLink;
           if (data.minPrice !== undefined) document.getElementById('minPrice').value = data.minPrice;
           if (data.maxPrice !== undefined) document.getElementById('maxPrice').value = data.maxPrice;
           if (data.minDiscount !== undefined) document.getElementById('minDiscount').value = data.minDiscount;
@@ -1728,8 +1728,8 @@
         priorityCategories: priorityCategories,
         usePriorityOnly: document.getElementById('usePriorityOnly').checked,
         affiliateId: document.getElementById('affiliateId').value.trim(),
-        groupName: document.getElementById('groupName').value.trim(),
-        groupId: document.getElementById('groupId').value.trim(),
+        waGroupIds: document.getElementById('waGroupIds').value.split('\n').map(u => u.trim()).filter(Boolean),
+        waGroupLink: document.getElementById('waGroupLink').value.trim(),
         minPrice: parseFloat(document.getElementById('minPrice').value) || 30,
         maxPrice: parseFloat(document.getElementById('maxPrice').value) || 10000,
         minDiscount: parseFloat(document.getElementById('minDiscount').value) || 0,

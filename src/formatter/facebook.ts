@@ -27,9 +27,14 @@ export function formatFacebookWaComment(waGroupLink?: string): string {
  */
 export function formatFacebookOffer(
   offer: AffiliateOffer,
-  _waGroupLink?: string
+  waGroupLink?: string
 ): string {
   const lines: string[] = [];
+  const rawGroupUrl = waGroupLink || process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N';
+  // Remove https:// para impedir que o Facebook puxar imagem do WhatsApp no lugar da foto do produto
+  const cleanGroupUrl = rawGroupUrl.replace(/^https?:\/\//, '');
+  const igHandle = '@achadosdomeli.bnu';
+  const igCleanUrl = 'instagram.com/achadosdomeli.bnu';
 
   lines.push('🔥 OFERTA IMPERDÍVEL 🔥');
   lines.push('');
@@ -49,18 +54,34 @@ export function formatFacebookOffer(
 
   if (offer.freeShipping) {
     lines.push('🚚 Frete Grátis!');
+  } else {
+    lines.push('🚚 Frete Rápido & Entrega Garantida!');
   }
 
   lines.push('');
-  lines.push(`${getRandomLinkCta(false)} ${offer.affiliateLink}`);
+  lines.push(getRandomLinkCta(false));
+
+  if (offer.productId) {
+    lines.push('');
+    lines.push(`🔍 Cole este texto no buscador do Mercado Livre: ${offer.productId}`);
+    lines.push('');
+    lines.push(`🔗 Ou acesse o link: ${offer.affiliateLink || offer.permalink}`);
+  } else {
+    lines.push(offer.affiliateLink || offer.permalink);
+  }
+
+  lines.push('');
+  lines.push('💬 Entre no nosso grupo VIP de ofertas no WhatsApp:');
+  lines.push(`👉 ${cleanGroupUrl}`);
+
+  lines.push('');
+  lines.push('📲 Siga nosso perfil oficial no Instagram:');
+  lines.push(`👉 ${igHandle} (${igCleanUrl})`);
+
   lines.push('');
   lines.push(getRandomFooterCta(false));
   lines.push('');
   lines.push(formatHashtagsLine(offer.title, 4));
-
-  // Chamada direta para o 1º comentário onde está o link de divulgação do WhatsApp
-  lines.push('');
-  lines.push('👇 Grupo VIP de Ofertas e Cupons no primeiro comentário abaixo!');
 
   return lines.join('\n');
 }
@@ -70,9 +91,13 @@ export function formatFacebookOffer(
  */
 export function formatFacebookOfferList(
   offers: AffiliateOffer[],
-  _waGroupLink?: string
+  waGroupLink?: string
 ): string {
   const lines: string[] = [];
+  const rawGroupUrl = waGroupLink || process.env.FB_WA_GROUP_LINK || 'https://chat.whatsapp.com/LFUefbB9eWkCymLxUfrj7N';
+  const cleanGroupUrl = rawGroupUrl.replace(/^https?:\/\//, '');
+  const igHandle = '@achadosdomeli.bnu';
+  const igCleanUrl = 'instagram.com/achadosdomeli.bnu';
 
   lines.push('🛒 TOP OFERTAS DO DIA 🛒');
   lines.push(`📅 ${new Date().toLocaleDateString('pt-BR')}`);
@@ -94,7 +119,12 @@ export function formatFacebookOfferList(
       lines.push('   🚚 Frete Grátis');
     }
 
-    lines.push(`   ${getRandomLinkCta(false)} ${offer.affiliateLink}`);
+    if (offer.productId) {
+      lines.push(`   🔍 Cole no buscador do ML: ${offer.productId}`);
+      lines.push(`   🔗 Acesse: ${offer.affiliateLink}`);
+    } else {
+      lines.push(`   ${getRandomLinkCta(false)} ${offer.affiliateLink}`);
+    }
 
     if (i < offers.length - 1) {
       lines.push('');
@@ -105,14 +135,17 @@ export function formatFacebookOfferList(
   lines.push('');
   lines.push('━━━━━━━━━━━━━━━━━━━━━━');
   lines.push('');
+  lines.push('💬 Entre no nosso grupo VIP de ofertas no WhatsApp:');
+  lines.push(`👉 ${cleanGroupUrl}`);
+  lines.push('');
+  lines.push('📲 Siga nosso perfil oficial no Instagram:');
+  lines.push(`👉 ${igHandle} (${igCleanUrl})`);
+  lines.push('');
   lines.push(getRandomFooterCta(false));
   lines.push('');
   if (offers.length > 0) {
     lines.push(formatHashtagsLine(offers[0].title, 4));
   }
-
-  lines.push('');
-  lines.push('👇 Grupo VIP de Ofertas e Cupons no primeiro comentário abaixo!');
 
   return lines.join('\n');
 }

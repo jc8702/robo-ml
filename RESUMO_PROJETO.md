@@ -4,9 +4,32 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 05/08/2026 - 15:58
+- **Última Atualização:** 05/08/2026 - 17:27
 
-- **05/08/2026 - 15:58:** **🚀 DEPLOY COMPLETO REALIZADO (GITHUB & VERCEL):**
+- **05/08/2026 - 17:27:** **⏱️ REORDENAMENTO DE FLUXO: AUTO-JOIN DE GRUPOS MOVIDO PARA O FINAL DO PROCESSO (`src/facebook/fb-poster.ts`):**
+  - **Reordenação do Fluxo**: A busca e entrada em novos grupos do Facebook (`autoDiscoverAndJoinFacebookGroups`) foi transferida do início do ciclo para o **final do processo**, após a conclusão completa dos envios para os grupos do WhatsApp, postagens nos grupos do Facebook e Instagram.
+  - **Sem Interrupções**: As postagens nos grupos existentes agora iniciam imediatamente sem aguardar a varredura de novos grupos.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+  - **Formatação de URLs sem Protocolo `https://`**:
+    - As chamadas do grupo do WhatsApp (`chat.whatsapp.com/...`) e do Instagram (`instagram.com/achadosdomeli.bnu`) nas postagens foram ajustadas sem o prefixo de protocolo `https://`. Isso impede que os algoritmos de scrapers do Facebook e do WhatsApp gerem cartões de prévia OpenGraph dos links sociais sobre a imagem do produto.
+  - **Remoção Automática no Playwright (`fb-poster.ts`)**:
+    - Expandida a varredura do robô no modal do Facebook com seletores para capturar e expurgar qualquer cartão de prévia de link que a plataforma tente criar, garantindo 100% que a única foto exibida seja a foto em alta resolução do produto postado.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+  - **Facebook (No Corpo do Post)**:
+    - Removida a regra de fazer comentários separados. O link do grupo VIP do WhatsApp (`FB_WA_GROUP_LINK`) e a chamada do Instagram (`@achadosdomeli.bnu`) agora são incluídos diretamente no corpo principal da publicação do Facebook.
+  - **WhatsApp (Apenas Instagram)**:
+    - Dentro do grupo do WhatsApp, a mensagem inclui exclusivamente o CTA do Instagram (`@achadosdomeli.bnu`), omitindo o próprio link do grupo do WhatsApp.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
+  - **Extração de Link Curto & ID do Produto (`fetchOfficialAffiliateShortLink`)**:
+    - Atualizada a função de captura na barra oficial de afiliados do Mercado Livre para varrer o modal e extrair simultaneamente o link curto `meli.la` e o ID de busca do produto (ex: `103WG5-TQ6V`).
+    - Adicionado suporte a `productId` nas interfaces `MLOffer` e `AffiliateOffer`.
+  - **Formatação de Legendas no WhatsApp (`src/formatter/whatsapp.ts`)**:
+    - Mantida a estrutura rica de mensagens (título, descontos, frete, badges, hashtags) integrando o bloco oficial de busca por ID do Mercado Livre:
+      `🔍 *Cole este texto no buscador do Mercado Livre:* [ID_DO_PRODUTO]`
+      `🔗 *Ou acesse o link:* https://meli.la/...`
+  - **Variação Dinâmica de CTAs (`src/formatter/cta-phrases.ts`)**:
+    - Expandida a coleção `CTA_PHRASES` com 30+ frases de chamada para ação variadas para garantir engajamento e diversidade em cada postagem.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
   - **Compilação TypeScript**: Executado `npm run build` com cópia de ativos estáticos da pasta `public` para `dist/public`.
   - **Sincronização GitHub**: Todas as alterações locais foram comitadas e enviadas para o repositório remoto [`https://github.com/jc8702/robo-ml.git`](https://github.com/jc8702/robo-ml.git) na branch `main`.
   - **Deploy Vercel Production**:

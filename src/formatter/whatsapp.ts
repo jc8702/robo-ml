@@ -43,7 +43,19 @@ export function formatIndividualOffer(offer: AffiliateOffer): string {
 
   lines.push('');
   lines.push(getRandomLinkCta(true));
-  lines.push(offer.affiliateLink || offer.permalink);
+  
+  if (offer.productId) {
+    lines.push('');
+    lines.push(`🔍 *Cole este texto no buscador do Mercado Livre:* ${offer.productId}`);
+    lines.push('');
+    lines.push(`🔗 *Ou acesse o link:* ${offer.affiliateLink || offer.permalink}`);
+  } else {
+    lines.push(offer.affiliateLink || offer.permalink);
+  }
+
+  lines.push('');
+  lines.push('📲 *Siga nosso Instagram:*');
+  lines.push('👉 *@achadosdomeli.bnu* (instagram.com/achadosdomeli.bnu)');
   lines.push('');
   lines.push(getRandomFooterCta(true));
   lines.push('');
@@ -78,7 +90,12 @@ export function formatOfferList(offers: AffiliateOffer[]): string {
       lines.push('   🚚 Frete Grátis');
     }
 
-    lines.push(`   ${getRandomLinkCta(true)} ${offer.affiliateLink}`);
+    if (offer.productId) {
+      lines.push(`   🔍 *Cole no buscador do ML:* ${offer.productId}`);
+      lines.push(`   🔗 *Acesse:* ${offer.affiliateLink}`);
+    } else {
+      lines.push(`   ${getRandomLinkCta(true)} ${offer.affiliateLink}`);
+    }
 
     if (i < offers.length - 1) {
       lines.push('');
@@ -88,6 +105,9 @@ export function formatOfferList(offers: AffiliateOffer[]): string {
 
   lines.push('');
   lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+  lines.push('');
+  lines.push('📲 *Siga nosso Instagram:*');
+  lines.push('👉 *@achadosdomeli.bnu* (instagram.com/achadosdomeli.bnu)');
   lines.push('');
   lines.push(getRandomFooterCta(true));
 

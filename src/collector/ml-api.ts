@@ -13,6 +13,7 @@ export interface MLOffer {
   title: string;
   permalink: string;
   affiliateLink?: string;
+  productId?: string;
   thumbnail: string;
   originalPrice: number;
   currentPrice: number;
@@ -218,13 +219,20 @@ export async function openMLLoginBrowser(): Promise<BrowserContext> {
 
 
 
+export interface AffiliateInfoResult {
+  shortLink: string | null;
+  productId: string | null;
+}
+
 /**
- * Extrai o link curto oficial de afiliado (meli.la) acionando a barra oficial de afiliados do Mercado Livre.
+ * Extrai o link curto oficial de afiliado (meli.la) e o ID de busca do produto acionando a barra oficial de afiliados do Mercado Livre.
  */
 export async function fetchOfficialAffiliateShortLink(
   page: Page,
   permalink: string
-): Promise<string | null> {
+): Promise<AffiliateInfoResult> {
+  const result: AffiliateInfoResult = { shortLink: null, productId: null };
+
   try {
     const cleanUrl = permalink.split('?')[0].split('#')[0];
     const currentUrl = page.url();
@@ -235,24 +243,32 @@ export async function fetchOfficialAffiliateShortLink(
     await page.waitForTimeout(1200);
 
     // 0. Verifica se a página ou a barra já contêm diretamente um link curto (meli.la / mercadolivre.com/sec)
-    const directVal = await page.evaluate(() => {
-      const elements = Array.from(document.querySelectorAll('a[href], input[value], textarea'));
+    const directData = await page.evaluate(() => {
+      let link: string | null = null;
+      let pid: string | null = null;
+      const elements = Array.from(document.querySelectorAll('a[href], input[value], textarea, p, span, div'));
       for (const el of elements) {
         const val = (el as HTMLAnchorElement).href || (el as HTMLInputElement).value || el.textContent || '';
-        if (val.includes('meli.la/') || val.includes('mercadolivre.com/sec/') || val.includes('mliv.re/')) {
+        if (!link && (val.includes('meli.la/') || val.includes('mercadolivre.com/sec/') || val.includes('mliv.re/'))) {
           const match = val.match(/https?:\/\/(?:meli\.la|mercadolivre\.com\/sec|mliv\.re)\/[a-zA-Z0-9_-]+/i);
-          if (match) return match[0];
+          if (match) link = match[0];
+        }
+        if (!pid && (val.includes('ID do produto') || val.includes('buscador do Mercado Livre'))) {
+          const idMatch = val.match(/(?:ID do produto|buscador do Mercado Livre:?)\s*([A-Z0-9]{4,8}-[A-Z0-9]{3,6})/i);
+          if (idMatch) pid = idMatch[1];
         }
       }
-      return null;
+      return { link, pid };
     });
 
-    if (directVal) {
-      console.log(`  ✨ Link curto oficial extraído diretamente da página Mercado Livre: ${directVal}`);
-      return directVal;
+    if (directData.link) {
+      result.shortLink = directData.link;
+      result.productId = directData.pid;
+      console.log(`  ✨ Link curto oficial extraído diretamente da página: ${result.shortLink} ${result.productId ? `(ID: ${result.productId})` : ''}`);
+      if (result.shortLink && result.productId) return result;
     }
 
-    // Procura o botão de ação na barra superior/inferior de afiliados do Mercado Livre
+    // Procura o botão de ação na barra superior/inferior de afiliados do Mercado Livre ("Compartilhar", "Gerar link", etc.)
     const shareBtn = page.locator(
       'button:has-text("Compartilhar"), button:has-text("Gerar link"), button:has-text("Gerar Link"), button:has-text("Copiar link"), button:has-text("Copiar Link"), div:has-text("GANHOS") button, button[class*="share"], button[class*="affiliate"], a:has-text("Compartilhar"), a:has-text("Gerar link")'
     ).first();
@@ -261,41 +277,60 @@ export async function fetchOfficialAffiliateShortLink(
       await shareBtn.click().catch(() => {});
       await page.waitForTimeout(1200);
 
-      // 1. Tenta pegar o valor de um input que contenha 'meli.la' ou 'mercadolivre.com/sec'
-      const meliInput = page.locator('input[value*="meli.la"], input[value*="mercadolivre.com/sec"], input[value*="mliv.re"]').first();
-      if (await meliInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        const val = await meliInput.inputValue().catch(() => '');
-        if (val && val.startsWith('http')) {
-          console.log(`  ✨ Link curto oficial extraído da barra Mercado Livre: ${val}`);
-          await page.keyboard.press('Escape').catch(() => {});
-          return val;
-        }
-      }
+      // Varredura completa do modal de compartilhamento do ML
+      const modalData = await page.evaluate(() => {
+        let link: string | null = null;
+        let pid: string | null = null;
 
-      // 2. Fallback de varredura no modal de compartilhamento
-      const extractedVal = await page.evaluate(() => {
-        const inputs = Array.from(document.querySelectorAll('input, textarea, a[href], p, span, div'));
-        for (const input of inputs) {
-          const val = (input as HTMLInputElement).value || (input as HTMLAnchorElement).href || input.textContent || '';
-          if (val.includes('meli.la/') || val.includes('mercadolivre.com/sec/') || val.includes('mliv.re/')) {
+        const allElements = Array.from(document.querySelectorAll('input, textarea, a[href], p, span, div'));
+        for (const el of allElements) {
+          const val = (el as HTMLInputElement).value || (el as HTMLAnchorElement).href || el.textContent || '';
+
+          if (!link && (val.includes('meli.la/') || val.includes('mercadolivre.com/sec/') || val.includes('mliv.re/'))) {
             const match = val.match(/https?:\/\/(?:meli\.la|mercadolivre\.com\/sec|mliv\.re)\/[a-zA-Z0-9_-]+/i);
-            if (match) return match[0];
+            if (match) link = match[0];
+          }
+
+          if (!pid) {
+            const idMatch = val.match(/(?:ID do produto|buscador do Mercado Livre:?)\s*([A-Z0-9]{4,8}-[A-Z0-9]{3,6})/i);
+            if (idMatch) pid = idMatch[1];
           }
         }
-        return null;
+
+        // Tenta capturar especificamente o input do "ID do produto"
+        if (!pid) {
+          const labels = Array.from(document.querySelectorAll('*')).filter(el => (el.textContent || '').includes('ID do produto'));
+          for (const label of labels) {
+            const container = label.closest('div') || label.parentElement;
+            if (container) {
+              const input = container.querySelector('input, textarea');
+              if (input && (input as HTMLInputElement).value) {
+                const textVal = (input as HTMLInputElement).value.trim();
+                if (/^[A-Z0-9]{4,8}-[A-Z0-9]{3,6}$/i.test(textVal)) {
+                  pid = textVal;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        return { link, pid };
       });
 
       await page.keyboard.press('Escape').catch(() => {});
 
-      if (extractedVal) {
-        console.log(`  ✨ Link curto oficial extraído da barra Mercado Livre: ${extractedVal}`);
-        return extractedVal;
+      if (modalData.link) result.shortLink = modalData.link;
+      if (modalData.pid) result.productId = modalData.pid;
+
+      if (result.shortLink) {
+        console.log(`  ✨ Extraído da barra de afiliados ML: Link=${result.shortLink} | ID Produto=${result.productId || 'N/A'}`);
       }
     }
   } catch (err) {
     console.warn(`  ⚠️ Não foi possível extrair o link pela barra de afiliados: ${err instanceof Error ? err.message : String(err)}`);
   }
-  return null;
+  return result;
 }
 
 /**
@@ -712,7 +747,8 @@ export async function collectOffers(
     try {
       const page = await getOrCreateMLContext().then((res) => (res.context.pages().length > 0 ? res.context.pages()[0] : res.context.newPage()));
       for (const offer of finalOffers) {
-        let shortLink = await fetchOfficialAffiliateShortLink(page, offer.permalink);
+        const affiliateData = await fetchOfficialAffiliateShortLink(page, offer.permalink);
+        let shortLink = affiliateData.shortLink;
         if (!shortLink) {
           // Fallback para conversão canônica oficial com matt_tool do Mercado Livre
           shortLink = convertToOfficialMLAffiliateLink(offer.permalink, config);
@@ -725,8 +761,11 @@ export async function collectOffers(
             shortLink.includes('matt_tool='))
         ) {
           offer.affiliateLink = shortLink;
+          if (affiliateData.productId) {
+            offer.productId = affiliateData.productId;
+          }
           verifiedOffers.push(offer);
-          console.log(`  ✅ [COMISSÃO CONFIRMADA] "${offer.title}" ➔ Link Afiliado: ${shortLink}`);
+          console.log(`  ✅ [COMISSÃO CONFIRMADA] "${offer.title}" ➔ Link Afiliado: ${shortLink} ${offer.productId ? `| ID: ${offer.productId}` : ''}`);
         } else {
           console.warn(`  🚫 [SEM COMISSÃO DESCARTADO] "${offer.title}" descartado pois NÃO gerou link de afiliado na barra oficial ML.`);
         }

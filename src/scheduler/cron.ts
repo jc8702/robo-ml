@@ -44,7 +44,7 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
 
     console.log(`\n[CRON] [${new Date().toLocaleTimeString('pt-BR')}] Iniciando ciclo automático de ofertas...`);
 
-    const groupJid = process.env.WHATSAPP_GROUP_ID;
+    const groupIds = config.whatsapp.groupIds;
 
     const offers = await collectOffers(config.queries, config);
 
@@ -73,26 +73,37 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
     console.error('[CRON] Erro ao salvar histórico:', histErr);
   }
 
-  // 2. Disparo para o WhatsApp (Isolado em try/catch)
-  if (groupJid) {
-    console.log(`\n📱 [WHATSAPP] Enviando ${affiliateOffers.length} ofertas para o grupo...`);
+  // 2. Disparo para o(s) WhatsApp (Isolado em try/catch)
+  if (groupIds.length > 0) {
+    console.log(`\n📱 [WHATSAPP] Enviando ${affiliateOffers.length} ofertas para ${groupIds.length} grupo(s)...`);
     try {
-      let sentCount = 0;
-      for (let i = 0; i < affiliateOffers.length; i++) {
-        const offer = affiliateOffers[i];
-        const sent = await sendOfferWithPhoto(offer, groupJid);
-        if (sent) sentCount++;
+      let totalSent = 0;
+      for (let g = 0; g < groupIds.length; g++) {
+        const groupJid = groupIds[g];
+        console.log(`📱 [WHATSAPP] Grupo ${g + 1}/${groupIds.length}: ${groupJid}`);
+        let sentCount = 0;
+        for (let i = 0; i < affiliateOffers.length; i++) {
+          const offer = affiliateOffers[i];
+          const sent = await sendOfferWithPhoto(offer, groupJid);
+          if (sent) sentCount++;
 
-        if (i < affiliateOffers.length - 1) {
-          await new Promise((r) => setTimeout(r, 3000));
+          if (i < affiliateOffers.length - 1) {
+            await new Promise((r) => setTimeout(r, 3000));
+          }
+        }
+        totalSent += sentCount;
+        console.log(`📱 [WHATSAPP] Grupo ${g + 1} concluído: ${sentCount} de ${affiliateOffers.length} ofertas enviadas.`);
+        if (g < groupIds.length - 1) {
+          console.log(`📱 [WHATSAPP] Aguardando 5 segundos antes do próximo grupo...`);
+          await new Promise((r) => setTimeout(r, 5000));
         }
       }
-      console.log(`📱 [WHATSAPP] Concluído: ${sentCount} de ${affiliateOffers.length} ofertas enviadas com sucesso!`);
+      console.log(`📱 [WHATSAPP] Todos os grupos concluídos: ${totalSent} ofertas enviadas no total!`);
     } catch (waErr) {
       console.error('❌ [WHATSAPP] Erro na automação do WhatsApp:', waErr);
     }
   } else {
-    console.log('⚠️ [WHATSAPP] WHATSAPP_GROUP_ID não configurado no .env. Pulando envio do WhatsApp e continuando para FB/IG...');
+    console.log('⚠️ [WHATSAPP] Nenhum grupo WhatsApp configurado. Adicione IDs na aba Filtros & Agendamento.');
   }
 
   // 3. Postagem nos Grupos do Facebook (Isolado em try/catch)
