@@ -1065,16 +1065,14 @@ export async function postOffersToFacebookGroups(
     // 🔄 SYNC: Sincroniza automaticamente todos os grupos que o perfil já faz parte
     await syncJoinedFacebookGroups(page);
 
-    // Recarrega dinamicamente a lista de grupos se for ciclo normal (não teste de 1 grupo)
-    if (maxGroupsPerCycle > 1 && existsSync(join(process.cwd(), '.env'))) {
+    // Recarrega dinamicamente a lista de grupos atualizada após a sincronização
+    if (process.env.FB_GROUP_URLS) {
+      groupUrls = process.env.FB_GROUP_URLS.split(',').map((u) => u.trim()).filter(Boolean);
+    } else if (existsSync(join(process.cwd(), '.env'))) {
       const envContent = readFileSync(join(process.cwd(), '.env'), 'utf-8');
       const updatedUrlsMatch = envContent.match(/^FB_GROUP_URLS=(.*)$/m);
       if (updatedUrlsMatch && updatedUrlsMatch[1].trim()) {
         groupUrls = updatedUrlsMatch[1].split(',').map((u) => u.trim()).filter(Boolean);
-      }
-      const updatedMaxMatch = envContent.match(/^FB_MAX_GROUPS_PER_CYCLE=(\d+)$/m);
-      if (updatedMaxMatch) {
-        maxGroupsPerCycle = parseInt(updatedMaxMatch[1], 10);
       }
     }
 
@@ -1171,54 +1169,89 @@ export async function syncJoinedFacebookGroups(page: Page): Promise<{ totalGroup
   console.log('  🔄 [SYNC] Escaneando todos os grupos que seu perfil do Facebook faz parte...');
 
   try {
-    // Navega para a página oficial que lista os grupos do perfil
-    await page.goto('https://www.facebook.com/groups/joins/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await randomDelay(3000, 5000);
+    let extractedGroupUrls: string[] = [];
 
-    // Rola a página para garantir que todos os grupos sejam carregados
-    await page.evaluate(async () => {
-      for (let i = 0; i < 4; i++) {
-        window.scrollTo(0, document.body.scrollHeight);
-        await new Promise((r) => setTimeout(r, 1000));
-      }
-    });
+    // Helper para extrair URLs dos links na página atual
+    const extractFromPage = async (): Promise<string[]> => {
+      return await page.evaluate(() => {
+        const links = Array.from(document.querySelectorAll('a[href*="/groups/"]')) as HTMLAnchorElement[];
+        const urls: string[] = [];
 
-    // Extrai os links dos grupos
-    const extractedGroupUrls = await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll('a[href*="/groups/"]')) as HTMLAnchorElement[];
-      const urls: string[] = [];
+        for (const link of links) {
+          const href = link.href || link.getAttribute('href') || '';
+          if (!href) continue;
 
-      for (const link of links) {
-        const href = link.href;
-        if (!href) continue;
+          // Filtra navegação interna que não seja um grupo específico
+          if (
+            href.includes('/search/') ||
+            href.includes('/create/') ||
+            href.includes('/feed/') ||
+            href.includes('/joins/') ||
+            href.includes('/discover/') ||
+            href.includes('/notifications/') ||
+            href.includes('/user/') ||
+            href.includes('/category/') ||
+            href.includes('/members/') ||
+            href.includes('/about/') ||
+            href.includes('/media/') ||
+            href.includes('/my_shares/')
+          ) {
+            continue;
+          }
 
-        // Filtra links de navegação interna do Facebook
-        if (
-          href.includes('/search/') ||
-          href.includes('/create/') ||
-          href.includes('/feed/') ||
-          href.includes('/joins/') ||
-          href.includes('/discover/') ||
-          href.includes('/notifications/') ||
-          href.includes('/user/')
-        ) {
-          continue;
-        }
-
-        const match = href.match(/facebook\.com\/groups\/([^\/?#]+)/i);
-        if (match && match[1]) {
-          const cleanUrl = `https://www.facebook.com/groups/${match[1]}/`;
-          if (!urls.includes(cleanUrl)) {
-            urls.push(cleanUrl);
+          const match = href.match(/facebook\.com\/groups\/([^\/?#]+)/i) || href.match(/\/groups\/([^\/?#]+)/i);
+          if (match && match[1]) {
+            const slug = match[1];
+            if (['joins', 'create', 'search', 'discover', 'feed', 'notifications', 'user'].includes(slug.toLowerCase())) {
+              continue;
+            }
+            const cleanUrl = `https://www.facebook.com/groups/${slug}/`;
+            if (!urls.includes(cleanUrl)) {
+              urls.push(cleanUrl);
+            }
           }
         }
-      }
 
-      return urls;
-    });
+        return urls;
+      });
+    };
+
+    // 1. Tenta varrer via www.facebook.com/groups/joins/
+    try {
+      await page.goto('https://www.facebook.com/groups/joins/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await randomDelay(2000, 4000);
+      await page.evaluate(async () => {
+        for (let i = 0; i < 6; i++) {
+          window.scrollTo(0, document.body.scrollHeight);
+          await new Promise((r) => setTimeout(r, 800));
+        }
+      });
+      extractedGroupUrls = await extractFromPage();
+    } catch (err) {
+      console.warn('  ⚠️ [SYNC] Aviso ao acessar /groups/joins/:', err);
+    }
+
+    // 2. Se não encontrou nada ou para complementar, varre www.facebook.com/groups/
+    if (extractedGroupUrls.length === 0) {
+      try {
+        console.log('  ℹ️ [SYNC] Buscando grupos via www.facebook.com/groups/...');
+        await page.goto('https://www.facebook.com/groups/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await randomDelay(2000, 4000);
+        await page.evaluate(async () => {
+          for (let i = 0; i < 6; i++) {
+            window.scrollTo(0, document.body.scrollHeight);
+            await new Promise((r) => setTimeout(r, 800));
+          }
+        });
+        const additionalUrls = await extractFromPage();
+        extractedGroupUrls = Array.from(new Set([...extractedGroupUrls, ...additionalUrls]));
+      } catch (err) {
+        console.warn('  ⚠️ [SYNC] Aviso ao acessar /groups/:', err);
+      }
+    }
 
     if (extractedGroupUrls.length === 0) {
-      console.log('  ℹ️ [SYNC] Nenhum grupo encontrado em /groups/joins/.');
+      console.log('  ℹ️ [SYNC] Nenhum grupo encontrado nas páginas do Facebook.');
       return { totalGroups: 0, updated: false };
     }
 

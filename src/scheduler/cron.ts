@@ -110,22 +110,20 @@ export async function runAutomaticCycle(_configHint?: AppConfig): Promise<void> 
   }
 
   // 3. Postagem nos Grupos do Facebook (Isolado em try/catch)
-  if (config.facebook && config.facebook.enabled && config.facebook.groupUrls.length > 0) {
+  if (config.facebook && config.facebook.enabled) {
     console.log('\n📘 [FACEBOOK] Iniciando postagem nos grupos do Facebook...');
     try {
       const fbResult = await postOffersToFacebookGroups(
         affiliateOffers,
-        config.facebook.groupUrls,
-        config.facebook.maxGroupsPerCycle,
-        config.facebook.delayBetweenPostsSec,
+        config.facebook.groupUrls || [],
+        config.facebook.maxGroupsPerCycle || 64,
+        config.facebook.delayBetweenPostsSec || 60,
         config.facebook.waGroupLink
       );
       console.log(`📘 [FACEBOOK] Concluído: ${fbResult.success} publicados, ${fbResult.failed} falharam.`);
     } catch (fbError) {
       console.error('❌ [FACEBOOK] Erro na automação do Facebook:', fbError);
     }
-  } else if (config.facebook && config.facebook.enabled && config.facebook.groupUrls.length === 0) {
-    console.log('⚠️ [FACEBOOK] Facebook habilitado mas nenhum grupo configurado. Adicione FB_GROUP_URLS no .env.');
   }
 
   // 4. Postagem no Instagram (Feed / Posts de Alto Impacto Orgânico) (Isolado em try/catch)

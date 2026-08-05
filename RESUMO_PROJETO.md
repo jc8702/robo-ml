@@ -4,7 +4,13 @@
 - **Status Atual:** Transição 100% concluída para a arquitetura **Local-First**. O robô executa localmente via inicializador de 1 clique (`Iniciar-Bot.bat`), abre automaticamente a interface de configurações em `http://localhost:3000` e gerencia as sessões/logins locais do WhatsApp, Facebook e Instagram.
 - **Caminho Local:** `C:\Users\jc-pr\.gemini\antigravity-ide\scratch\ml-ofertas-bot`
 - **Objetivo Central:** Bot autônomo que coleta ofertas do Mercado Livre, converte links para afiliados e envia **fotos em alta resolução com a legenda promocional** diretamente em grupos de WhatsApp, **grupos do Facebook** e **feed do Instagram**.
-- **Última Atualização:** 05/08/2026 - 19:35
+- **Última Atualização:** 05/08/2026 - 19:50
+
+- **05/08/2026 - 19:50:** **⚡ CORREÇÃO E ATIVAÇÃO AUTOMÁTICA DA VARREDURA & POSTAGEM DO FACEBOOK (`src/scheduler/cron.ts`, `src/facebook/fb-poster.ts`):**
+  - **Desbloqueio de Execução (`cron.ts`)**: Removida a verificação impeditiva `config.facebook.groupUrls.length > 0` que impedia o robô de chamar `postOffersToFacebookGroups` quando a lista de grupos no `.env` estava vazia. Agora o ciclo do Facebook sempre roda quando o Facebook está habilitado, acionando a varredura automática logo no início.
+  - **Varredura Robusta Multi-Endpoint (`fb-poster.ts`)**: Aprimorada a função `syncJoinedFacebookGroups` para buscar grupos tanto em `/groups/joins/` quanto em `/groups/`, realizando rolagens profundas de página para capturar 100% dos grupos participados pelo perfil.
+  - **Recarregamento Instantâneo das URLs (`fb-poster.ts`)**: Adicionada a atualização imediata da variável `groupUrls` a partir da lista recém-sincronizada, garantindo que a postagem nos grupos comece instantaneamente na sequência da varredura.
+  - **Validação de Build**: Executado `npm run build` com sucesso de compilação 100% limpo sem erros.
 
 - **05/08/2026 - 19:35:** **🚀 DEPLOY COMPLETO (GITHUB & VERCEL PRODUCTION):**
   - **Compilação**: `npm run build` executado com sucesso de compilação 100% limpo sem erros.
