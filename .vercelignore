@@ -1,0 +1,11 @@
+node_modules
+.chrome-profile
+.wa-profile
+.fb-profile
+.ig-profile
+.wa-auth
+.fb-temp-images
+.ig-temp-images
+dist
+*.png
+*.jpg
